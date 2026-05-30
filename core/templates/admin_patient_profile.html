@@ -1,0 +1,227 @@
+{% extends "admin_base.html" %}
+{% block title %}{{ patient.name }} - Admin - CerviStage AI{% endblock %}
+{% block breadcrumb %}<span class="text-gray-600">Patient Profile</span>{% endblock %}
+
+{% block content %}
+<div class="p-6">
+    <!-- Back Button -->
+    <div class="mb-4">
+        <a href="{% url 'admin-patients' %}" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back to All Patients
+        </a>
+    </div>
+
+    <!-- Patient Header -->
+    <div class="bg-white shadow rounded-lg mb-6">
+        <div class="px-6 py-5 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center mr-4">
+                        <span class="text-indigo-600 font-bold text-2xl">{{ patient.name|first|upper }}</span>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.name }}</h1>
+                        <p class="text-sm text-gray-500 font-mono">ID: {{ patient.patient_id }}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">Created by</p>
+                    <p class="text-sm font-medium text-gray-900">
+                        {% if patient.created_by %}
+                            {{ patient.created_by.get_full_name|default:patient.created_by.username }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-4">
+            <div class="grid grid-cols-4 gap-4">
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Age</p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900">{{ patient.age|default:"—" }}</p>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">HPV Status</p>
+                    <p class="mt-1">
+                        {% if patient.hpv_status is None %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Unknown</span>
+                        {% elif patient.hpv_status %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Positive</span>
+                        {% else %}
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Negative</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Total Analyses</p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900">{{ total_analyses }}</p>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Registered</p>
+                    <p class="mt-1 text-lg font-semibold text-gray-900">{{ patient.created_at|date:"M d, Y" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Overview -->
+    {% if total_analyses > 0 %}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <!-- Latest Analysis -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-5 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Latest Analysis</h3>
+            </div>
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Result</p>
+                        <p class="text-2xl font-bold text-gray-900">{{ latest_analysis.predicted_label }}</p>
+                    </div>
+                    <div class="h-12 w-12 rounded-full flex items-center justify-center
+                        {% if latest_analysis.predicted_label == 'Normal' %}bg-green-100
+                        {% elif latest_analysis.predicted_label == 'Carcinoma' %}bg-red-100
+                        {% elif latest_analysis.predicted_label == 'HSIL' %}bg-orange-100
+                        {% elif latest_analysis.predicted_label == 'LSIL' %}bg-yellow-100
+                        {% else %}bg-lime-100{% endif %}">
+                        <svg class="h-6 w-6
+                            {% if latest_analysis.predicted_label == 'Normal' %}text-green-600
+                            {% elif latest_analysis.predicted_label == 'Carcinoma' %}text-red-600
+                            {% elif latest_analysis.predicted_label == 'HSIL' %}text-orange-600
+                            {% elif latest_analysis.predicted_label == 'LSIL' %}text-yellow-600
+                            {% else %}text-lime-600{% endif %}"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Confidence</span>
+                        <span class="font-medium">{{ latest_analysis.confidence|floatformat:0 }}%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Date</span>
+                        <span class="font-medium">{{ latest_analysis.created_at|date:"M d, Y H:i" }}</span>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <a href="{% url 'admin-analysis-detail' latest_analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">
+                        View Details →
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Confidence -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-5 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Average Confidence</h3>
+            </div>
+            <div class="px-6 py-4">
+                <div class="flex items-center justify-center">
+                    <div class="text-center">
+                        <p class="text-5xl font-bold text-indigo-600">{{ avg_confidence }}%</p>
+                        <p class="text-sm text-gray-500 mt-2">across {{ total_analyses }} analyses</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Severity Distribution -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-5 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Severity Distribution</h3>
+            </div>
+            <div class="px-6 py-4">
+                <div class="space-y-3">
+                    {% for label, count in severity_counts.items %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-700">{{ label }}</span>
+                        <div class="flex items-center">
+                            <span class="text-sm text-gray-500 mr-2">{{ count }}</span>
+                            <div class="w-24 bg-gray-200 rounded-full h-2">
+                                <div class="bg-indigo-600 h-2 rounded-full" style="width: {% widthratio count total_analyses 100 %}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis History -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-5 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Analysis History</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uncertainty</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">AI Level</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for analysis in analyses %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ analysis.created_at|date:"M d, Y H:i" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                {% if analysis.predicted_label == 'Normal' %}bg-green-100 text-green-800
+                                {% elif analysis.predicted_label == 'Carcinoma' %}bg-red-100 text-red-800
+                                {% elif analysis.predicted_label == 'HSIL' %}bg-orange-100 text-orange-800
+                                {% elif analysis.predicted_label == 'LSIL' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-lime-100 text-lime-800{% endif %}">
+                                {{ analysis.predicted_label }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ analysis.confidence|floatformat:1 }}%
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ analysis.uncertainty|floatformat:1 }}%
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-xs font-semibold
+                                {% if analysis.confidence_level == 'High' %}text-green-600
+                                {% elif analysis.confidence_level == 'Moderate' %}text-yellow-600
+                                {% else %}text-red-600{% endif %}">
+                                {{ analysis.confidence_level }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <a href="{% url 'admin-analysis-detail' analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-12 text-center">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p class="mt-2 text-sm font-medium text-gray-900">No analyses yet</p>
+            <p class="mt-1 text-sm text-gray-500">This patient hasn't had any analyses performed.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

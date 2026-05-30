@@ -1,0 +1,211 @@
+{% extends "user_base.html" %}
+{% block title %}CerviStage AI — Cervical Cancer Detection{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="relative bg-gradient-to-br from-blue-900 via-indigo-900 to-blue-800 rounded-3xl overflow-hidden mb-12 px-8 py-16 text-white">
+    <div class="absolute inset-0 opacity-10">
+        <svg class="w-full h-full" viewBox="0 0 800 400" fill="none">
+            <circle cx="600" cy="100" r="200" fill="white"/>
+            <circle cx="100" cy="300" r="150" fill="white"/>
+        </svg>
+    </div>
+    <div class="relative max-w-3xl">
+        <div class="inline-flex items-center px-4 py-2 bg-white/10 rounded-full text-sm font-medium text-blue-100 mb-6 border border-white/20">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            AI-Powered Cervical Cancer Screening
+        </div>
+        <h1 class="text-4xl md:text-5xl font-bold leading-tight mb-4">
+            Early Detection Saves Lives
+        </h1>
+        <p class="text-lg text-blue-100 mb-8 leading-relaxed">
+            CerviStage AI uses advanced deep learning to analyze cervical cell images and provide
+            instant staging results — from Normal to Carcinoma — with high accuracy and clinical recommendations.
+        </p>
+        <div class="flex flex-wrap gap-4">
+            <a href="{% url 'analyze-page' %}" class="inline-flex items-center px-6 py-3 bg-white text-indigo-700 font-semibold rounded-xl hover:bg-blue-50 transition-colors shadow-lg">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                Start Analysis
+            </a>
+            {% if request.user.is_authenticated %}
+            <a href="{% url 'dashboard-page' %}" class="inline-flex items-center px-6 py-3 bg-white/10 border border-white/30 text-white font-semibold rounded-xl hover:bg-white/20 transition-colors">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                My Dashboard
+            </a>
+            {% else %}
+            <a href="{% url 'login-page' %}" class="inline-flex items-center px-6 py-3 bg-white/10 border border-white/30 text-white font-semibold rounded-xl hover:bg-white/20 transition-colors">
+                Sign In
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <!-- Stats -->
+    <div class="relative mt-12 grid grid-cols-3 gap-6 max-w-lg">
+        <div class="text-center">
+            <p class="text-3xl font-bold">96.4%</p>
+            <p class="text-blue-200 text-sm mt-1">F1 Accuracy</p>
+        </div>
+        <div class="text-center border-x border-white/20">
+            <p class="text-3xl font-bold">5</p>
+            <p class="text-blue-200 text-sm mt-1">Stage Classes</p>
+        </div>
+        <div class="text-center">
+            <p class="text-3xl font-bold">&lt;3s</p>
+            <p class="text-blue-200 text-sm mt-1">Analysis Time</p>
+        </div>
+    </div>
+</div>
+
+<!-- About Cervical Cancer -->
+<div class="mb-12">
+    <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-900">About Cervical Cancer</h2>
+        <p class="text-gray-500 mt-2">Understanding the disease and the importance of early screening</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white rounded-2xl p-6 shadow border border-gray-100">
+            <div class="h-12 w-12 bg-red-100 rounded-xl flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">Global Impact</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">
+                Cervical cancer is the 4th most common cancer in women worldwide. Over 600,000 new cases are diagnosed annually, with the highest rates in low-income countries.
+            </p>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow border border-gray-100">
+            <div class="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">Preventable & Treatable</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">
+                When detected early, cervical cancer has a 5-year survival rate above 90%. Regular Pap smears and HPV screening remain the gold standard for early detection.
+            </p>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow border border-gray-100">
+            <div class="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-gray-900 mb-2">HPV Connection</h3>
+            <p class="text-sm text-gray-600 leading-relaxed">
+                Nearly all cervical cancers are caused by persistent infection with high-risk HPV strains. Early identification of HPV-related cellular changes enables timely intervention.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Staging Guide -->
+<div class="bg-white rounded-2xl shadow border border-gray-100 p-8 mb-12">
+    <h2 class="text-xl font-bold text-gray-900 mb-2">Cervical Cancer Staging</h2>
+    <p class="text-gray-500 text-sm mb-6">CerviStage AI classifies images into 5 categories based on cellular abnormalities</p>
+    <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        <div class="text-center p-4 bg-green-50 rounded-xl border border-green-200">
+            <div class="w-10 h-10 bg-green-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <span class="text-white font-bold text-sm">0</span>
+            </div>
+            <p class="font-semibold text-green-800 text-sm">Normal</p>
+            <p class="text-xs text-green-600 mt-1">No abnormality. Routine screening.</p>
+        </div>
+        <div class="text-center p-4 bg-lime-50 rounded-xl border border-lime-200">
+            <div class="w-10 h-10 bg-lime-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <span class="text-white font-bold text-sm">1</span>
+            </div>
+            <p class="font-semibold text-lime-800 text-sm">Benign Atypia</p>
+            <p class="text-xs text-lime-600 mt-1">Mild changes. Repeat in 1 year.</p>
+        </div>
+        <div class="text-center p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+            <div class="w-10 h-10 bg-yellow-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <span class="text-white font-bold text-sm">2</span>
+            </div>
+            <p class="font-semibold text-yellow-800 text-sm">LSIL</p>
+            <p class="text-xs text-yellow-600 mt-1">Low-grade. Colposcopy in 3 months.</p>
+        </div>
+        <div class="text-center p-4 bg-orange-50 rounded-xl border border-orange-200">
+            <div class="w-10 h-10 bg-orange-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <span class="text-white font-bold text-sm">3</span>
+            </div>
+            <p class="font-semibold text-orange-800 text-sm">HSIL</p>
+            <p class="text-xs text-orange-600 mt-1">High-grade. Urgent colposcopy.</p>
+        </div>
+        <div class="text-center p-4 bg-red-50 rounded-xl border border-red-200">
+            <div class="w-10 h-10 bg-red-500 rounded-full mx-auto mb-2 flex items-center justify-center">
+                <span class="text-white font-bold text-sm">4</span>
+            </div>
+            <p class="font-semibold text-red-800 text-sm">Carcinoma</p>
+            <p class="text-xs text-red-600 mt-1">Cancer. Immediate referral.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Features -->
+<div class="mb-12">
+    <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold text-gray-900">How CerviStage AI Works</h2>
+        <p class="text-gray-500 mt-2">Three simple steps to get an AI-powered staging result</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="text-center">
+            <div class="h-16 w-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <div class="bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded-full inline-block mb-3">Step 1</div>
+            <h3 class="font-semibold text-gray-900 mb-2">Upload Image</h3>
+            <p class="text-sm text-gray-600">Upload a Pap smear or colposcopy image in JPEG, PNG, BMP or TIFF format.</p>
+        </div>
+        <div class="text-center">
+            <div class="h-16 w-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15"/>
+                </svg>
+            </div>
+            <div class="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full inline-block mb-3">Step 2</div>
+            <h3 class="font-semibold text-gray-900 mb-2">AI Analysis</h3>
+            <p class="text-sm text-gray-600">Our EfficientNetV2-S + DeiT model analyzes the image using hierarchical multi-scale fusion.</p>
+        </div>
+        <div class="text-center">
+            <div class="h-16 w-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div class="bg-green-600 text-white text-xs font-bold px-2 py-1 rounded-full inline-block mb-3">Step 3</div>
+            <h3 class="font-semibold text-gray-900 mb-2">Get Results</h3>
+            <p class="text-sm text-gray-600">Receive staging classification, confidence scores, probability distribution and clinical recommendations.</p>
+        </div>
+    </div>
+</div>
+
+<!-- CTA -->
+<div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-2xl p-8 text-center text-white mb-8">
+    <h2 class="text-2xl font-bold mb-2">Ready to Analyze?</h2>
+    <p class="text-indigo-100 mb-6">Upload your first image and get AI-powered staging results in seconds.</p>
+    <a href="{% url 'analyze-page' %}" class="inline-flex items-center px-8 py-3 bg-white text-indigo-700 font-semibold rounded-xl hover:bg-blue-50 transition-colors shadow-lg">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Launch Analyzer
+    </a>
+</div>
+
+<!-- Disclaimer -->
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+    <p class="text-xs text-amber-700">
+        <strong>Medical Disclaimer:</strong> CerviStage AI is designed for research and screening assistance only.
+        Results must be reviewed by a qualified medical professional before any clinical decision is made.
+    </p>
+</div>
+{% endblock %}

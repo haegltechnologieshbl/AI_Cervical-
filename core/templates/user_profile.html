@@ -1,0 +1,112 @@
+{% extends "user_base.html" %}
+{% block title %}My Profile - CerviStage AI{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="max-w-3xl mx-auto">
+        <!-- Profile Header -->
+        <div class="bg-white shadow rounded-lg mb-6">
+            <div class="px-6 py-5 border-b border-gray-200">
+                <h1 class="text-2xl font-bold text-gray-900">My Profile</h1>
+                <p class="text-sm text-gray-500 mt-1">Manage your account information</p>
+            </div>
+            <div class="px-6 py-6">
+                <div class="flex items-center mb-6">
+                    <div class="h-20 w-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
+                        <span class="text-white font-bold text-2xl">{{ user.username|first|upper }}</span>
+                    </div>
+                    <div class="ml-6">
+                        <h2 class="text-xl font-bold text-gray-900">{{ user.get_full_name|default:user.username }}</h2>
+                        <p class="text-sm text-gray-500">{{ user.email }}</p>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if user.profile.role == 'admin' %}bg-purple-100 text-purple-800
+                            {% elif user.profile.role == 'user' %}bg-green-100 text-green-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ user.profile.role|title }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Username</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.username }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Email</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.email }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Full Name</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.get_full_name|default:'Not set' }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Role</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.profile.role|title }}</p>
+                    </div>
+                    {% if user.profile.phone %}
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Phone</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.profile.phone }}</p>
+                    </div>
+                    {% endif %}
+                    {% if user.profile.department %}
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Department</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.profile.department }}</p>
+                    </div>
+                    {% endif %}
+                    {% if user.profile.license_number %}
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">License Number</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.profile.license_number }}</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Member Since</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.date_joined|date:"F d, Y" }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700">Last Login</label>
+                        <p class="mt-1 text-sm text-gray-900">{{ user.last_login|date:"F d, Y H:i"|default:'Never' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-6 py-5 border-b border-gray-200">
+                <h3 class="text-lg font-medium text-gray-900">Quick Actions</h3>
+            </div>
+            <div class="px-6 py-4">
+                <div class="space-y-3">
+                    <a href="{% url 'settings-page' %}" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg">
+                        <div class="flex items-center">
+                            <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span class="text-sm font-medium text-gray-900">Edit Profile Settings</span>
+                            <svg class="h-5 w-5 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </div>
+                    </a>
+                    <a href="{% url 'history-page' %}" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg">
+                        <div class="flex items-center">
+                            <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span class="text-sm font-medium text-gray-900">View Analysis History</span>
+                            <svg class="h-5 w-5 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

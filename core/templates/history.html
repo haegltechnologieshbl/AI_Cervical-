@@ -1,0 +1,89 @@
+{% extends "user_base.html" %}
+{% block title %}History — CerviStage AI{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Analysis History</h1>
+    <p class="text-sm text-gray-500 mt-1">Last 50 analyses.</p>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow border border-gray-100 overflow-hidden">
+    {% if analyses %}
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Date</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Result</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Confidence</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">AI Level</th>
+          <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for a in analyses %}
+        {% with cls=a.predicted_class %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4 text-gray-500">{{ a.created_at|date:"Y-m-d H:i" }}</td>
+          <td class="px-6 py-4">
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold text-white
+              {% if cls == 0 %}bg-green-500
+              {% elif cls == 1 %}bg-lime-500
+              {% elif cls == 2 %}bg-yellow-500
+              {% elif cls == 3 %}bg-orange-500
+              {% else %}bg-red-500{% endif %}">
+              {{ a.predicted_label }}
+            </span>
+          </td>
+          <td class="px-6 py-4 text-gray-600">{% widthratio a.confidence 1 100 %}%</td>
+          <td class="px-6 py-4">
+            <span class="text-xs font-semibold
+              {% if a.confidence_level == 'High' %}text-green-600
+              {% elif a.confidence_level == 'Moderate' %}text-yellow-600
+              {% else %}text-red-600{% endif %}">
+              {{ a.confidence_level }}
+            </span>
+          </td>
+          <td class="px-6 py-4">
+            <div class="flex items-center space-x-3">
+              <a href="{% url 'analysis-detail-page' a.analysis_id %}" class="text-indigo-600 hover:underline text-xs font-medium">View</a>
+              <button onclick="downloadReport('{{ a.analysis_id }}')"
+                      class="text-blue-600 hover:underline text-xs font-medium">PDF</button>
+            </div>
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="py-16 text-center text-gray-400">
+      <p class="text-lg font-medium">No analyses yet.</p>
+      <p class="text-sm mt-1"><a href="{% url 'analyze-page' %}" class="text-blue-600 hover:underline">Run your first analysis →</a></p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function downloadReport(analysisId) {
+  const resp = await fetch('/api/v1/reports/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    body: JSON.stringify({ analysis_id: analysisId }),
+  });
+  const blob = await resp.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cervistage_report_${analysisId.slice(0,8)}.pdf`;
+  a.click();
+}
+
+function getCookie(name) {
+  return document.cookie.split('; ').find(r => r.startsWith(name+'='))?.split('=')[1] || '';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,263 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}CerviStage AI{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            stage: {
+              normal: "#22c55e",
+              atypia: "#84cc16",
+              lsil: "#eab308",
+              hsil: "#f97316",
+              carcinoma: "#ef4444"
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    /* Print styles */
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-slate-50 text-gray-900 min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <!-- Logo and Brand -->
+        <div class="flex items-center">
+          <a href="{% url 'home' %}" class="flex items-center space-x-3">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-2">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+              </svg>
+            </div>
+            <div>
+              <span class="font-bold text-gray-900 text-lg">CerviStage AI</span>
+              <span class="text-xs text-gray-400 block -mt-1">Cervical Cancer Detection</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- Desktop Navigation -->
+        <div class="hidden md:flex items-center space-x-1">
+          <!-- Regular User Navigation -->
+          <a href="{% url 'analyze-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Analyze
+          </a>
+          <a href="{% url 'dashboard-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Dashboard
+          </a>
+
+          <a href="{% url 'history-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            History
+          </a>
+
+          <a href="{% url 'settings-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'settings-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Settings
+          </a>
+        </div>
+
+        <!-- Right side -->
+        <div class="flex items-center space-x-4">
+          {% if request.user.is_authenticated %}
+          <!-- User Menu (shown only when logged in) -->
+          <div class="relative">
+            <button onclick="toggleUserMenu()" class="flex items-center space-x-2 text-gray-700 hover:text-gray-900">
+              <div class="h-8 w-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
+                <span class="text-white font-medium text-sm">{{ request.user.username|first|upper }}</span>
+              </div>
+              <span class="hidden sm:inline text-sm font-medium">{{ request.user.get_full_name|default:request.user.username }}</span>
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            <!-- Dropdown Menu -->
+            <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5">
+              <div class="px-4 py-2 border-b border-gray-100">
+                <p class="text-sm font-medium text-gray-900">{{ request.user.get_full_name|default:request.user.username }}</p>
+                <p class="text-xs text-gray-500">{{ request.user.email }}</p>
+              </div>
+              <a href="{% url 'user-profile-page' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Profile</a>
+              <a href="{% url 'settings-page' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+              <button onclick="logout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
+            </div>
+          </div>
+          {% else %}
+          <!-- Sign In button (shown when not logged in) -->
+          <a href="{% url 'login-page' %}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            Sign In
+          </a>
+          {% endif %}
+
+          <!-- Research Badge -->
+          <span class="hidden sm:inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold">
+            Research Use Only
+          </span>
+        </div>
+
+        <!-- Mobile menu button -->
+        <div class="md:hidden">
+          <button onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-200">
+      <div class="px-2 pt-2 pb-3 space-y-1">
+        <!-- Regular User Mobile Navigation -->
+        <a href="{% url 'analyze-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Analyze
+        </a>
+        <a href="{% url 'dashboard-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Dashboard
+        </a>
+        <a href="{% url 'history-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          History
+        </a>
+        <a href="{% url 'settings-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'settings-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Settings
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="{% block main_classes %}max-w-7xl{% endblock %} mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="md:flex md:items-center md:justify-between">
+        <div class="flex justify-center space-x-6 md:order-2">
+          <span class="text-gray-400 hover:text-gray-500 text-sm">
+            <a href="#" class="hover:underline">Privacy</a>
+            <span class="mx-2">·</span>
+            <a href="#" class="hover:underline">Terms</a>
+            <span class="mx-2">·</span>
+            <a href="#" class="hover:underline">Support</a>
+          </span>
+        </div>
+        <div class="mt-8 md:mt-0 md:order-1">
+          <p class="text-center text-base text-gray-400">
+            &copy; 2026 CerviStage AI. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Function to get CSRF token from cookies
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    // Toggle user menu
+    function toggleUserMenu() {
+      const menu = document.getElementById('userMenu');
+      menu.classList.toggle('hidden');
+    }
+
+    // Toggle mobile menu
+    function toggleMobileMenu() {
+      const menu = document.getElementById('mobileMenu');
+      menu.classList.toggle('hidden');
+    }
+
+    // Logout function
+    async function logout() {
+      if (confirm('Are you sure you want to logout?')) {
+        try {
+          // Call logout API to clear session and blacklist token
+          const refreshToken = localStorage.getItem('refresh_token');
+          if (refreshToken) {
+            await fetch('/api/v1/auth/logout', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: JSON.stringify({
+                refresh: refreshToken
+              })
+            });
+          }
+        } catch (error) {
+          console.log('Logout API call failed, but continuing...');
+        }
+
+        // Clear local storage
+        localStorage.clear();
+
+        // Redirect to login
+        window.location.href = '/login/';
+      }
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+      const userMenu = document.getElementById('userMenu');
+      const userButton = event.target.closest('button');
+      if (!userButton || !userButton.onclick) {
+        if (!userMenu.contains(event.target)) {
+          userMenu.classList.add('hidden');
+        }
+      }
+    });
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,247 @@
+{% extends "user_base.html" %}
+
+{% block title %}{{ patient.name }} - Patient Profile{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <button onclick="history.back()" class="text-gray-500 hover:text-gray-700">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                        </svg>
+                    </button>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.name }}</h1>
+                        <p class="text-sm text-gray-500">Patient ID: {{ patient.patient_id }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="location.href='/analyze/?patient_id={{ patient.patient_id }}'" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        New Analysis
+                    </button>
+                    <button onclick="showEditModal()" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Edit
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Patient Info Card -->
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Patient Information</h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Full Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Patient ID</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.patient_id }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Age</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.age|default:"Not specified" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">HPV Status</dt>
+                        <dd class="mt-1 text-sm">
+                            {% if patient.hpv_status == True %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Positive</span>
+                            {% elif patient.hpv_status == False %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Negative</span>
+                            {% else %}
+                                <span class="text-gray-500">Unknown</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Registered Date</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.created_at|date:"F d, Y" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Total Analyses</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ total_analyses }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        {% if total_analyses > 0 %}
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Latest Result</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ latest_analysis.predicted_label }}</dd>
+                </div>
+            </div>
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Average Confidence</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ avg_confidence }}%</dd>
+                </div>
+            </div>
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+                <div class="px-4 py-5 sm:p-6">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Last Analysis</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ latest_analysis.created_at|timesince }} ago</dd>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Analysis History -->
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Analysis History</h3>
+                {% if analyses %}
+                <div class="space-y-4">
+                    {% for analysis in analyses %}
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="location.href='/analysis/{{ analysis.analysis_id }}'">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4">
+                                <div class="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                                    <svg class="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h4 class="text-lg font-medium text-gray-900">{{ analysis.predicted_label }}</h4>
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                            {% if analysis.predicted_class == 0 %}bg-green-100 text-green-800
+                                            {% elif analysis.predicted_class == 1 %}bg-yellow-100 text-yellow-800
+                                            {% elif analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
+                                            {% elif analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
+                                            {% else %}bg-red-100 text-red-800{% endif %}">
+                                            {{ analysis.confidence_level }}
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-gray-500">{{ analysis.created_at|date:"F d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold text-indigo-600">{{ analysis.confidence|floatformat:0 }}%</div>
+                                <div class="text-sm text-gray-500">Confidence</div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
+                                <span>Probability Breakdown</span>
+                                <a href="/analysis/{{ analysis.analysis_id }}" class="text-indigo-600 hover:text-indigo-900">View Details →</a>
+                            </div>
+                            <div class="grid grid-cols-5 gap-2">
+                                {% for label, prob in analysis.probabilities.items %}
+                                <div class="text-center">
+                                    <div class="text-xs text-gray-500 truncate">{{ label }}</div>
+                                    <div class="font-semibold text-gray-900">{{ prob|floatformat:0 }}%</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No analyses</h3>
+                    <p class="mt-1 text-sm text-gray-500">This patient has no analysis records yet.</p>
+                    <div class="mt-6">
+                        <button onclick="location.href='/analyze/?patient_id={{ patient.patient_id }}'" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                            Create First Analysis
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Patient Modal -->
+<div id="editModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Edit Patient</h3>
+            <form id="editPatientForm">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Name</label>
+                        <input type="text" id="editName" value="{{ patient.name }}" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Age</label>
+                        <input type="number" id="editAge" value="{{ patient.age|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">HPV Status</label>
+                        <select id="editHPV" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Unknown</option>
+                            <option value="true" {% if patient.hpv_status == True %}selected{% endif %}>Positive</option>
+                            <option value="false" {% if patient.hpv_status == False %}selected{% endif %}>Negative</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="hideEditModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function showEditModal() {
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function hideEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+document.getElementById('editPatientForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const patientId = '{{ patient.patient_id }}';
+    const data = {
+        name: document.getElementById('editName').value,
+        age: document.getElementById('editAge').value || null,
+        hpv_status: document.getElementById('editHPV').value === 'true' ? true :
+                    document.getElementById('editHPV').value === 'false' ? false : null
+    };
+
+    try {
+        const response = await fetch(`/api/v1/patients/${patientId}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            hideEditModal();
+            location.reload();
+        } else {
+            alert('Failed to update patient');
+        }
+    } catch (error) {
+        alert('Error updating patient');
+    }
+});
+</script>
+{% endblock %}
