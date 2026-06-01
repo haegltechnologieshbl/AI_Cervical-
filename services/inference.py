@@ -110,9 +110,13 @@ class InferenceService:
             return
 
         try:
+            # Enable graph optimization for faster inference
+            session_options = ort.SessionOptions()
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            
             providers = ["CPUExecutionProvider"]  # Use CPU only
-            self.session = ort.InferenceSession(str(model_path), providers=providers)
-            print(f"[SUCCESS] Model loaded from {model_path}")
+            self.session = ort.InferenceSession(str(model_path), sess_options=session_options, providers=providers)
+            print(f"[SUCCESS] Model loaded with graph optimization from {model_path}")
         except Exception as e:
             print(f"[ERROR] Failed to load model: {e}")
             import traceback
@@ -234,19 +238,25 @@ class InferenceService:
 
     # ── occlusion-sensitivity heatmap ──────────────────────────────────────────
     def generate_heatmap(self, image_file, predicted_class: int,
-                         grid_size: int = 8, patch_ratio: float = 0.15) -> str:
+                         grid_size: int = 4, patch_ratio: float = 0.15,
+                         skip_heatmap: bool = False) -> str:
         """
         Compute an occlusion-sensitivity heatmap and overlay it on the original
         image.  Returns a base64-encoded PNG string.
 
         How it works:
-          • Slide a grey square across the image in an NxN grid.
+          • Slide a grey square across the image in an NxN grid (reduced to 4x4 for speed).
           • For each position, replace the patch with the mean pixel value and
             run inference.
           • Measure how much the predicted-class probability *drops*.
           • Regions where the drop is large are the most important — these are
             coloured red in the overlay.
         """
+        # Skip heatmap for faster response if requested
+        if skip_heatmap:
+            print("[INFO] Heatmap generation skipped for faster response")
+            return ""
+        
         if self.session is None:
             return ""
 

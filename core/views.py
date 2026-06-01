@@ -893,6 +893,11 @@ class AnalyzeView(APIView):
                 {"error": "No image files provided"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Check if heatmap generation should be skipped (for batch processing performance)
+        skip_heatmap = request.query_params.get('skip_heatmap', '').lower() in ('true', '1', 'yes')
+        if skip_heatmap:
+            print("[DEBUG] Heatmap generation DISABLED for faster batch processing")
 
         # Log for debugging
         print(f"[DEBUG] Received {len(files)} files for analysis")
