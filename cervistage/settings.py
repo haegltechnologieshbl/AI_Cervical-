@@ -98,8 +98,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 MODEL_DIR = config("MODEL_DIR", default=str(BASE_DIR / "models"))
 
 # Max upload size: 20 MB per file
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1000 * 1024 * 1024  # 1GB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 1000 * 1024 * 1024  # 1GB
 
 # Max number of files: support batch uploads of 500+ images
 DATA_UPLOAD_MAX_NUMBER_FILES = 1000  # Allow up to 1000 files per upload
