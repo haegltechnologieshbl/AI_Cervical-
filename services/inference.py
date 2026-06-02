@@ -182,12 +182,12 @@ class InferenceService:
                 "message": "Low Confidence - Pathologist Review Required",
                 "action": "MANDATORY: Pathologist review required before clinical decisions",
                 "review_required": True,
-                "color": "#ef4444",  # Red
+                "color": "#ef4444",  # R
                 "icon": "alert-circle"
             }
 
     # ── core prediction ────────────────────────────────────────────────────────
-    def predict(self, image_file) -> Dict:
+    def predict(self, image_file, skip_heatmap=False) -> Dict:
         if self.session is None:
             raise RuntimeError(
                 "Model not loaded. Copy cervistage_net.onnx to the models/ directory."

@@ -831,52 +831,74 @@ def generate_results_frames(analysis_records, predictions_list):
     anim_dir_name = f"anim_{uuid.uuid4().hex[:8]}"
     anim_dir_path = os.path.join(settings.MEDIA_ROOT, 'animations', anim_dir_name)
     os.makedirs(anim_dir_path, exist_ok=True)
+    print(f"[DEBUG] Generating frames in: {anim_dir_path}")
     
     width, height = 640, 640
     frame_urls = []
     
     for i, (record, pred) in enumerate(zip(analysis_records, predictions_list)):
-        img_path = record.image.path
-        img = cv2.imread(img_path)
-        if img is None:
-            continue
+        try:
+            img_path = record.image.path
+            print(f"[DEBUG] Frame {i}: Reading image from {img_path}")
+            if not os.path.exists(img_path):
+                print(f"[WARN] Image file not found: {img_path}")
+                continue
             
-        h, w = img.shape[:2]
-        scale = min(width/w, height/h)
-        new_w, new_h = int(w * scale), int(h * scale)
-        resized = cv2.resize(img, (new_w, new_h))
-        
-        frame = np.zeros((height, width, 3), dtype=np.uint8)
-        y_offset = (height - new_h) // 2
-        x_offset = (width - new_w) // 2
-        frame[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
-        
-        label = pred["predicted_label"]
-        conf = f"Confidence: {round(pred['confidence'] * 100)}%"
-        
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, height - 80), (width, height), (0, 0, 0), -1)
-        frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
-        
-        colors = {
-            0: (94, 197, 34),    # Green (BGR)
-            1: (22, 204, 132),   # Lime
-            2: (8, 179, 234),    # Yellow
-            3: (22, 115, 249),   # Orange
-            4: (68, 68, 239)     # Red
-        }
-        cls_idx = pred["predicted_class"]
-        color = colors.get(cls_idx, (255, 255, 255))
-        
-        cv2.putText(frame, label, (20, height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        cv2.putText(frame, conf, (20, height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        
-        frame_filename = f"frame_{i:03d}.jpg"
-        frame_filepath = os.path.join(anim_dir_path, frame_filename)
-        cv2.imwrite(frame_filepath, frame)
-        
-        frame_urls.append(f"{settings.MEDIA_URL}animations/{anim_dir_name}/{frame_filename}")
-        
+            img = cv2.imread(img_path)
+            if img is None:
+                print(f"[WARN] Failed to read image with cv2: {img_path}")
+                continue
+            
+            h, w = img.shape[:2]
+            scale = min(width/w, height/h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            resized = cv2.resize(img, (new_w, new_h))
+            
+            frame = np.zeros((height, width, 3), dtype=np.uint8)
+            y_offset = (height - new_h) // 2
+            x_offset = (width - new_w) // 2
+            frame[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized
+            
+            label = pred["predicted_label"]
+            conf = f"Confidence: {round(pred['confidence'] * 100)}%"
+            
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (0, height - 80), (width, height), (0, 0, 0), -1)
+            frame = cv2.addWeighted(overlay, 0.6, frame, 0.4, 0)
+            
+            colors = {
+                0: (94, 197, 34),    # Green (BGR)
+                1: (22, 204, 132),   # Lime
+                2: (8, 179, 234),    # Yellow
+                3: (22, 115, 249),   # Orange
+                4: (68, 68, 239)     # Red
+            }
+            cls_idx = pred["predicted_class"]
+            color = colors.get(cls_idx, (255, 255, 255))
+            
+            cv2.putText(frame, label, (20, height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+            cv2.putText(frame, conf, (20, height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            
+            frame_filename = f"frame_{i:03d}.jpg"
+            frame_filepath = os.path.join(anim_dir_path, frame_filename)
+            cv2.imwrite(
+                frame_filepath,
+                frame,
+                [cv2.IMWRITE_JPEG_QUALITY, 70]
+            )
+            print(f"[DEBUG] Frame {i}: Saved to {frame_filepath}")
+            
+            frame_url = f"{settings.MEDIA_URL}animations/{anim_dir_name}/{frame_filename}"
+            frame_urls.append(frame_url)
+            print(f"[DEBUG] Frame {i}: URL = {frame_url}")
+            
+        except Exception as e:
+            print(f"[ERROR] Frame {i}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    print(f"[DEBUG] Generated {len(frame_urls)} frames total")
     return frame_urls
 
 
@@ -888,6 +910,15 @@ class AnalyzeView(APIView):
     def post(self, request):
         # Get all files from request (supports both single and multiple uploads)
         files = request.FILES.getlist('file')
+        MAX_FILES = 200
+
+        if len(files) > MAX_FILES:
+            return Response(
+                {
+                    "error": f"Maximum {MAX_FILES} images allowed"
+                },
+                status=400
+            )
         if not files:
             return Response(
                 {"error": "No image files provided"},
@@ -925,7 +956,10 @@ class AnalyzeView(APIView):
 
             try:
                 print(f"[DEBUG] Processing file {idx+1}/{len(files)}: {image_file.name}")
-                prediction = svc.predict(image_file)
+                prediction = svc.predict(
+                    image_file,
+                    skip_heatmap=skip_heatmap
+                )
                 predictions_list.append(prediction)
 
                 # Store individual analysis record in database
@@ -952,7 +986,12 @@ class AnalyzeView(APIView):
         
 
         # Generate frames of the results
-        frame_urls = generate_results_frames(analysis_records, predictions_list)
+        frame_urls = []
+        if len(files) <= 30:
+            frame_urls = generate_results_frames(
+                analysis_records,
+                predictions_list
+    )
 
         # Build response with averaged results
         # Build individual results with their classifications
