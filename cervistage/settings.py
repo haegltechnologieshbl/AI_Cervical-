@@ -126,3 +126,7 @@ SIMPLE_JWT = {
 # Login/Logout URLs
 LOGIN_URL = "/login/"
 LOGOUT_URL = "/logout/"
+
+FILE_UPLOAD_HANDLERS = [
+    "django.core.files.uploadhandler.TemporaryFileUploadHandler",
+]

@@ -136,60 +136,90 @@
     4: "Carcinoma"
   };
 
-  let uploadedFileURL = null; // keep reference for side-by-side
-  let uploadedFileURLs = []; // store all uploaded file object URLs (index-aligned with API response)
+  let uploadedFileURL = null;
+  let uploadedFileURLs = [];
+
+  const MAX_FILES = 500;
+  const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
+  const REQUEST_TIMEOUT = 1800000; // 30 minutes
 
   // File preview - show count if multiple files selected
   document.getElementById('fileInput').addEventListener('change', function () {
-    const files = Array.from(this.files);
-    if (files.length === 0) return;
 
-    // Filter for image files only
-    const imageFiles = files.filter(f => f.type.startsWith('image/') ||
-      f.name.toLowerCase().match(/\.(jpg|jpeg|png|bmp|tiff?|gif)$/i));
+      const files = Array.from(this.files);
 
-    if (imageFiles.length === 0) {
-      document.getElementById('errorMsg').textContent = 'No image files found. Please select JPEG, PNG, BMP, or TIFF files.';
-      document.getElementById('errorMsg').classList.remove('hidden');
-      return;
-    }
+      if (files.length === 0) return;
 
-    const previewContainer = document.getElementById('imagePreviewContainer');
-    const content = document.getElementById('dropContent');
-    const fileLabel = document.getElementById('fileLabel');
+      // Cleanup old previews
+      uploadedFileURLs.forEach(url => URL.revokeObjectURL(url));
+      uploadedFileURLs = [];
 
-    // Store object URLs for all uploaded images (index-aligned)
-    uploadedFileURLs = imageFiles.map(f => URL.createObjectURL(f));
+      // Maximum file count protection
+      if (files.length > MAX_FILES) {
+          alert(`Maximum ${MAX_FILES} images allowed per batch.`);
+          this.value = '';
+          return;
+      }
 
-    // Show preview of all images
-    previewContainer.innerHTML = '';
-    uploadedFileURLs.forEach(url => {
-      const img = document.createElement('img');
-      img.src = url;
-      img.className = 'w-full h-16 object-cover rounded shadow-sm border border-gray-200';
-      previewContainer.appendChild(img);
-    });
+      // Filter image files only
+      const imageFiles = files.filter(
+          f =>
+              f.type.startsWith('image/') ||
+              f.name.toLowerCase().match(/\.(jpg|jpeg|png|bmp|tiff?|gif)$/i)
+      );
 
-    previewContainer.classList.remove('hidden');
-    content.classList.add('hidden');
+      if (imageFiles.length === 0) {
+          document.getElementById('errorMsg').textContent =
+              'No image files found. Please select JPEG, PNG, BMP, or TIFF files.';
+          document.getElementById('errorMsg').classList.remove('hidden');
+          return;
+      }
 
-    // Update label to show file count
-    if (imageFiles.length === 1) {
-      fileLabel.textContent = imageFiles[0].name;
-    } else {
-      fileLabel.textContent = `📁 ${imageFiles.length} images selected`;
-    }
+      // Check total upload size
+      const totalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
 
-    // Update button text to show count
-    const submitBtn = document.getElementById('submitBtn');
-    const btnText = document.getElementById('btnText');
-    if (imageFiles.length > 1) {
-      btnText.textContent = `Analyze ${imageFiles.length} Images`;
-    } else {
-      btnText.textContent = `Run AI Analysis`;
-    }
+      if (totalSize > MAX_TOTAL_SIZE) {
+          alert('Total upload size exceeds 1GB.');
+          this.value = '';
+          return;
+      }
 
-    document.getElementById('errorMsg').classList.add('hidden');
+      const previewContainer = document.getElementById('imagePreviewContainer');
+      const content = document.getElementById('dropContent');
+      const fileLabel = document.getElementById('fileLabel');
+
+      uploadedFileURLs = imageFiles.map(file =>
+          URL.createObjectURL(file)
+      );
+
+      previewContainer.innerHTML = '';
+
+      uploadedFileURLs.forEach(url => {
+          const img = document.createElement('img');
+          img.src = url;
+          img.className =
+              'w-full h-16 object-cover rounded shadow-sm border border-gray-200';
+          previewContainer.appendChild(img);
+      });
+
+      previewContainer.classList.remove('hidden');
+      content.classList.add('hidden');
+
+      if (imageFiles.length === 1) {
+          fileLabel.textContent = imageFiles[0].name;
+      } else {
+          fileLabel.textContent =
+              `📁 ${imageFiles.length} images selected`;
+      }
+
+      const btnText = document.getElementById('btnText');
+
+      btnText.textContent =
+          imageFiles.length > 1
+              ? `Analyze ${imageFiles.length} Images`
+              : 'Run AI Analysis';
+
+      document.getElementById('errorMsg').classList.add('hidden');
   });
 
   // Simulated progress for batch processing
@@ -258,7 +288,19 @@
     console.log(`[LOG] FormData ready with ${imageFiles.length} files`);
 
     try {
-      const resp = await fetch('/api/v1/analyze', { method: 'POST', body: formData });
+      const controller = new AbortController();
+
+      const timeoutId = setTimeout(() => {
+          controller.abort();
+      }, REQUEST_TIMEOUT);
+
+      const resp = await fetch('/api/v1/analyze', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
       const data = await resp.json();
 
       console.log(`[LOG] Response received. OK: ${resp.ok}, Status: ${resp.status}`);
@@ -275,6 +317,15 @@
 
       renderResult(data);
     } catch (err) {
+
+    if (err.name === 'AbortError') {
+        errorMsg.textContent =
+            'Request timed out. Large batch processing exceeded 30 minutes.';
+    } else {
+        errorMsg.textContent = err.message;
+    }
+
+    console.error('[ERROR]', err);
       console.error(`[ERROR] ${err.message}`);
       clearInterval(prog.interval);
       prog.wrapper.classList.add('hidden');
