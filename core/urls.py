@@ -24,6 +24,7 @@ urlpatterns = [
 
     # --- REST API ---
     path("api/v1/analyze", views.AnalyzeView.as_view(), name="analyze"),
+    path("api/v1/analyze/fast", views.FastAnalyzeView.as_view(), name="analyze-fast"),
     path("api/v1/analyze/<uuid:analysis_id>", views.AnalysisApiDetailView.as_view(), name="analyze-detail"),
     path("api/v1/reports/generate", views.ReportView.as_view(), name="report-generate"),
     path("api/v1/health", views.HealthView.as_view(), name="health"),
