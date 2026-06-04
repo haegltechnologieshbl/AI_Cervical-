@@ -136,14 +136,41 @@ class InferenceService:
 
     # ── preprocessing ──────────────────────────────────────────────────────────
     def preprocess(self, image_file) -> np.ndarray:
-        img = Image.open(image_file).convert("RGB").resize((224, 224), Image.BILINEAR)
+        """Preprocess image: open, downscale if large, resize to 224x224, normalize."""
+        import time
+        start_time = time.time()
+        
+        # Open image and convert to RGB
+        image_file.seek(0)
+        img = Image.open(image_file).convert("RGB")
+        
+        # For very large images, create thumbnail first to reduce memory
+        if img.size[0] > 1000 or img.size[1] > 1000:
+            img.thumbnail((1000, 1000), Image.LANCZOS)
+            print(f"[DEBUG] Downsampled large image to {img.size}")
+        
+        # Resize to model input size
+        img = img.resize((224, 224), Image.BILINEAR)
+        
+        # Convert to numpy array and normalize
         arr = np.array(img, dtype=np.float32) / 255.0
         arr = (arr - IMAGE_MEAN) / IMAGE_STD
+        
+        elapsed = time.time() - start_time
+        print(f"[DEBUG] Preprocessing took {elapsed:.2f}s")
+        
         return arr.transpose(2, 0, 1)[np.newaxis]  # (1, 3, 224, 224)
 
     def _raw_image(self, image_file) -> np.ndarray:
         """Return the uploaded image as (224, 224, 3) uint8 RGB for heatmap overlay."""
-        img = Image.open(image_file).convert("RGB").resize((224, 224), Image.BILINEAR)
+        image_file.seek(0)
+        img = Image.open(image_file).convert("RGB")
+        
+        # Same optimization: downscale large images first
+        if img.size[0] > 1000 or img.size[1] > 1000:
+            img.thumbnail((1000, 1000), Image.LANCZOS)
+        
+        img = img.resize((224, 224), Image.BILINEAR)
         return np.array(img, dtype=np.uint8)
 
     # ── confidence interpretation ─────────────────────────────────────────────────
