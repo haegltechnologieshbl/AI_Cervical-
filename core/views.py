@@ -582,11 +582,13 @@ class ChangePasswordView(APIView):
 # ─── Patient Management Views (API) ─────────────────────────────────────────────
 
 @method_decorator(csrf_exempt, name='dispatch')
-class PatientListAPIView(APIView):
-    """GET /api/v1/patients - List all patients for the current doctor"""
+class PatientListCreateAPIView(APIView):
+    """GET/POST /api/v1/patients - List or create patients"""
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
 
     def get(self, request):
+        """List all patients for the current doctor"""
         patients = Patient.objects.filter(
             created_by=request.user
         ).order_by('-created_at')
@@ -597,14 +599,8 @@ class PatientListAPIView(APIView):
             "total": patients.count()
         }, status=status.HTTP_200_OK)
 
-
-@method_decorator(csrf_exempt, name='dispatch')
-class PatientCreateAPIView(APIView):
-    """POST /api/v1/patients - Create a new patient"""
-    permission_classes = [IsAuthenticated]
-    parser_classes = [JSONParser]
-
     def post(self, request):
+        """Create a new patient"""
         serializer = PatientSerializer(data=request.data)
         if serializer.is_valid():
             # Set the created_by to current user

@@ -37,8 +37,7 @@ urlpatterns = [
     path("api/v1/stats", views.StatsView.as_view(), name="stats"),
 
     # --- Patient Management API ---
-    path("api/v1/patients", views.PatientListAPIView.as_view(), name="patient-list"),
-    path("api/v1/patients", views.PatientCreateAPIView.as_view(), name="patient-create"),
+    path("api/v1/patients", views.PatientListCreateAPIView.as_view(), name="patient-list"),
     path("api/v1/patients/<uuid:patient_id>", views.PatientDetailAPIView.as_view(), name="patient-detail"),
     path("api/v1/patients/<uuid:patient_id>/history", views.PatientHistoryAPIView.as_view(), name="patient-history"),
     path("api/v1/patients/<uuid:patient_id>/stats", views.PatientStatsAPIView.as_view(), name="patient-stats"),
