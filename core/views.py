@@ -581,6 +581,7 @@ class ChangePasswordView(APIView):
 
 # ─── Patient Management Views (API) ─────────────────────────────────────────────
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PatientListAPIView(APIView):
     """GET /api/v1/patients - List all patients for the current doctor"""
     permission_classes = [IsAuthenticated]
@@ -671,6 +672,7 @@ class PatientDetailAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PatientHistoryAPIView(APIView):
     """GET /api/v1/patients/<patient_id>/history - Get all analyses for a patient"""
     permission_classes = [IsAuthenticated]
@@ -730,6 +732,7 @@ class PatientHistoryAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PatientStatsAPIView(APIView):
     """GET /api/v1/patients/<patient_id>/stats - Get trend statistics for a patient"""
     permission_classes = [IsAuthenticated]
