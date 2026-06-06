@@ -77,6 +77,9 @@
           <a href="{% url 'analyze-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Analyze
           </a>
+          <a href="{% url 'patient-management' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'patient-management' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Patients
+          </a>
           <a href="{% url 'dashboard-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Dashboard
           </a>
@@ -146,6 +149,9 @@
         <!-- Regular User Mobile Navigation -->
         <a href="{% url 'analyze-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Analyze
+        </a>
+        <a href="{% url 'patient-management' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'patient-management' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Patients
         </a>
         <a href="{% url 'dashboard-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Dashboard

@@ -1,6 +1,6 @@
 {% extends "user_base.html" %}
 
-{% block title %}{{ patient.name }} - Patient Profile{% endblock %}
+{% block title %}{{ patient.full_name }} - Patient Profile{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-50">
@@ -15,12 +15,12 @@
                         </svg>
                     </button>
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.name }}</h1>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.full_name }}</h1>
                         <p class="text-sm text-gray-500">Patient ID: {{ patient.patient_id }}</p>
                     </div>
                 </div>
                 <div class="flex items-center space-x-3">
-                    <button onclick="location.href='/analyze/?patient_id={{ patient.patient_id }}'" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <button onclick="analyzeCurrentPatient()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                         <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
@@ -42,10 +42,10 @@
         <div class="bg-white shadow rounded-lg mb-8">
             <div class="px-4 py-5 sm:p-6">
                 <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Patient Information</h3>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Full Name</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.name }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.full_name }}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Patient ID</dt>
@@ -53,31 +53,90 @@
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Age</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.age|default:"Not specified" }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.age|default:patient.age_calculated|default:"Not specified" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Gender</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if patient.gender == 'F' %}Female{% elif patient.gender == 'M' %}Male{% else %}Other{% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Phone</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.phone|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.email|default:"—" }}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">HPV Status</dt>
                         <dd class="mt-1 text-sm">
-                            {% if patient.hpv_status == True %}
+                            {% if patient.hpv_status == 'positive' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Positive</span>
-                            {% elif patient.hpv_status == False %}
+                            {% elif patient.hpv_status == 'negative' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Negative</span>
                             {% else %}
-                                <span class="text-gray-500">Unknown</span>
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>
                             {% endif %}
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Registered Date</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.created_at|date:"F d, Y" }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Last Screening</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.last_screening_date|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Total Analyses</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ total_analyses }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Registered</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.created_at|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-3">
+                        <dt class="text-sm font-medium text-gray-500">Address</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.address|default:"—" }}</dd>
                     </div>
                 </dl>
             </div>
         </div>
+
+        <!-- Medical History Card -->
+        {% if patient.medical_history or patient.medications or patient.allergies or patient.family_history %}
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Medical History</h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                    {% if patient.medical_history %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Medical History</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.medical_history }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if patient.medications %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Current Medications</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.medications }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if patient.allergies %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Allergies</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.allergies }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if patient.family_history %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Family History</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.family_history }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if patient.notes %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Additional Notes</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.notes }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Statistics -->
         {% if total_analyses > 0 %}
@@ -96,8 +155,8 @@
             </div>
             <div class="bg-white overflow-hidden shadow rounded-lg">
                 <div class="px-4 py-5 sm:p-6">
-                    <dt class="text-sm font-medium text-gray-500 truncate">Last Analysis</dt>
-                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ latest_analysis.created_at|timesince }} ago</dd>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Analyses</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ total_analyses }}</dd>
                 </div>
             </div>
         </div>
@@ -123,7 +182,7 @@
                                         <h4 class="text-lg font-medium text-gray-900">{{ analysis.predicted_label }}</h4>
                                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                                             {% if analysis.predicted_class == 0 %}bg-green-100 text-green-800
-                                            {% elif analysis.predicted_class == 1 %}bg-yellow-100 text-yellow-800
+                                            {% elif analysis.predicted_class == 1 %}bg-lime-100 text-lime-800
                                             {% elif analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
                                             {% elif analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
                                             {% else %}bg-red-100 text-red-800{% endif %}">
@@ -163,7 +222,7 @@
                     <h3 class="mt-2 text-sm font-medium text-gray-900">No analyses</h3>
                     <p class="mt-1 text-sm text-gray-500">This patient has no analysis records yet.</p>
                     <div class="mt-6">
-                        <button onclick="location.href='/analyze/?patient_id={{ patient.patient_id }}'" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        <button onclick="analyzeCurrentPatient()" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                             Create First Analysis
                         </button>
                     </div>
@@ -175,60 +234,148 @@
 </div>
 
 <!-- Edit Patient Modal -->
-<div id="editModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div class="mt-3">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Edit Patient</h3>
-            <form id="editPatientForm">
-                <div class="space-y-4">
+<div id="editModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">Edit Patient</h3>
+            <button onclick="hideEditModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <form id="editPatientForm" class="space-y-6">
+            <!-- Basic Information -->
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Basic Information</h4>
+                <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Name</label>
-                        <input type="text" id="editName" value="{{ patient.name }}" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <label class="block text-sm font-medium text-gray-700">First Name *</label>
+                        <input type="text" name="first_name" value="{{ patient.first_name }}" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Last Name *</label>
+                        <input type="text" name="last_name" value="{{ patient.last_name }}" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
+                        <input type="date" name="date_of_birth" value="{% if patient.date_of_birth %}{{ patient.date_of_bound|date:'Y-m-d' }}{% endif %}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Age</label>
-                        <input type="number" id="editAge" value="{{ patient.age|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <input type="number" name="age" value="{{ patient.age|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     </div>
                     <div>
+                        <label class="block text-sm font-medium text-gray-700">Gender *</label>
+                        <select name="gender" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Select...</option>
+                            <option value="F" {% if patient.gender == 'F' %}selected{% endif %}>Female</option>
+                            <option value="M" {% if patient.gender == 'M' %}selected{% endif %}>Male</option>
+                            <option value="O" {% if patient.gender == 'O' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Phone</label>
+                        <input type="text" name="phone" value="{{ patient.phone|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" name="email" value="{{ patient.email|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Address</label>
+                        <textarea name="address" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.address|default:'' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medical Information -->
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Medical Information</h4>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
                         <label class="block text-sm font-medium text-gray-700">HPV Status</label>
-                        <select id="editHPV" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                            <option value="">Unknown</option>
-                            <option value="true" {% if patient.hpv_status == True %}selected{% endif %}>Positive</option>
-                            <option value="false" {% if patient.hpv_status == False %}selected{% endif %}>Negative</option>
+                        <select name="hpv_status" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="unknown" {% if patient.hpv_status == 'unknown' %}selected{% endif %}>Unknown</option>
+                            <option value="positive" {% if patient.hpv_status == 'positive' %}selected{% endif %}>Positive</option>
+                            <option value="negative" {% if patient.hpv_status == 'negative' %}selected{% endif %}>Negative</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Last Screening Date</label>
+                        <input type="date" name="last_screening_date" value="{% if patient.last_screening_date %}{{ patient.last_screening_date|date:'Y-m-d' }}{% endif %}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Pregnancy Status</label>
+                        <select name="pregnancy_status" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="unknown" {% if patient.pregnancy_status == 'unknown' %}selected{% endif %}>Unknown</option>
+                            <option value="yes" {% if patient.pregnancy_status == 'yes' %}selected{% endif %}>Yes</option>
+                            <option value="no" {% if patient.pregnancy_status == 'no' %}selected{% endif %}>No</option>
                         </select>
                     </div>
                 </div>
-                <div class="mt-6 flex justify-end space-x-3">
-                    <button type="button" onclick="hideEditModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
-                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700">Save Changes</button>
+            </div>
+
+            <!-- Medical History -->
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Medical History</h4>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Medical History</label>
+                        <textarea name="medical_history" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.medical_history|default:'' }}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Current Medications</label>
+                        <textarea name="medications" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.medications|default:'' }}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Allergies</label>
+                        <textarea name="allergies" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.allergies|default:'' }}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Family History</label>
+                        <textarea name="family_history" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.family_history|default:'' }}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Additional Notes</label>
+                        <textarea name="notes" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.notes|default:'' }}</textarea>
+                    </div>
                 </div>
-            </form>
-        </div>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t">
+                <button type="button" onclick="hideEditModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700">Save Changes</button>
+            </div>
+        </form>
     </div>
 </div>
 
 <script>
+function analyzeCurrentPatient() {
+    window.location.href = `/analyze/?patient_id={{ patient.patient_id }}`;
+}
+
 function showEditModal() {
     document.getElementById('editModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
 }
 
 function hideEditModal() {
     document.getElementById('editModal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
 }
 
 document.getElementById('editPatientForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
     const patientId = '{{ patient.patient_id }}';
-    const data = {
-        name: document.getElementById('editName').value,
-        age: document.getElementById('editAge').value || null,
-        hpv_status: document.getElementById('editHPV').value === 'true' ? true :
-                    document.getElementById('editHPV').value === 'false' ? false : null
-    };
 
     try {
         const response = await fetch(`/api/v1/patients/${patientId}`, {
-            method: 'PATCH',
+            method: 'PUT',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
@@ -237,7 +384,8 @@ document.getElementById('editPatientForm').addEventListener('submit', async (e) 
             hideEditModal();
             location.reload();
         } else {
-            alert('Failed to update patient');
+            const result = await response.json();
+            alert('Failed to update patient: ' + (result.error || 'Unknown error'));
         }
     } catch (error) {
         alert('Error updating patient');

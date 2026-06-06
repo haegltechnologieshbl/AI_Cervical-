@@ -1,5 +1,5 @@
 {% extends "admin_base.html" %}
-{% block title %}{{ patient.name }} - Admin - CerviStage AI{% endblock %}
+{% block title %}{{ patient.full_name }} - Admin - CerviStage AI{% endblock %}
 {% block breadcrumb %}<span class="text-gray-600">Patient Profile</span>{% endblock %}
 
 {% block content %}
@@ -20,10 +20,10 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
                     <div class="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center mr-4">
-                        <span class="text-indigo-600 font-bold text-2xl">{{ patient.name|first|upper }}</span>
+                        <span class="text-indigo-600 font-bold text-2xl">{{ patient.full_name|first|upper }}</span>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.name }}</h1>
+                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.full_name }}</h1>
                         <p class="text-sm text-gray-500 font-mono">ID: {{ patient.patient_id }}</p>
                     </div>
                 </div>

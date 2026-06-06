@@ -45,6 +45,91 @@
         </label>
         <input type="file" id="fileInput" name="file" accept="image/*,.bmp,.tiff,.tif" class="hidden" multiple />
 
+        <!-- Patient Selection -->
+        <div class="bg-white border border-indigo-200 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
+            <label class="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              Patient Selection
+            </label>
+          </div>
+          <div class="p-4">
+            <div class="flex gap-3 mb-3">
+              <button type="button" id="selectExistingBtn" class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border-2 border-indigo-500 bg-indigo-500 text-white hover:bg-indigo-600 transition-colors">
+                Select Existing
+              </button>
+              <button type="button" id="createNewBtn" class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+                Create New Patient
+              </button>
+            </div>
+
+            <!-- Select Existing Patient -->
+            <div id="selectExistingSection">
+              <div class="relative">
+                <select id="patientSelect" name="patient_id" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500 appearance-none">
+                  <option value="">-- Select a patient --</option>
+                </select>
+                <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                  <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </div>
+              </div>
+              <div id="selectedPatientInfo" class="hidden mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p class="text-sm font-medium text-green-800" id="selectedPatientName"></p>
+                <p class="text-xs text-green-600 mt-1" id="selectedPatientDetails"></p>
+              </div>
+            </div>
+
+            <!-- Create New Patient -->
+            <div id="createNewSection" class="hidden">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">First Name *</label>
+                  <input type="text" id="patientFirstName" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500" placeholder="John" required />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">Last Name *</label>
+                  <input type="text" id="patientLastName" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500" placeholder="Doe" required />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">Age *</label>
+                  <input type="number" id="patientAge" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500" placeholder="35" min="0" max="120" required />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">Gender *</label>
+                  <select id="patientGender" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500" required>
+                    <option value="">Select</option>
+                    <option value="F">Female</option>
+                    <option value="M">Male</option>
+                    <option value="O">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">Phone</label>
+                  <input type="tel" id="patientPhone" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500" placeholder="+1 234 567 890" />
+                </div>
+                <div>
+                  <label class="text-xs text-gray-600 font-medium block mb-1">HPV Status</label>
+                  <select id="patientHPV" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500">
+                    <option value="unknown">Unknown</option>
+                    <option value="positive">Positive</option>
+                    <option value="negative">Negative</option>
+                  </select>
+                </div>
+              </div>
+              <button type="button" id="savePatientBtn" class="w-full mt-3 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium rounded-lg text-sm transition-all flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Save & Select Patient
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Optional metadata -->
         <details class="bg-white border border-gray-200 rounded-xl">
           <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600 select-none">
@@ -154,8 +239,220 @@
   const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
   const REQUEST_TIMEOUT = 1800000; // 30 minutes
 
+  // === PATIENT SELECTION ===
+  let selectedPatientId = null;
+  let patientsList = [];
+
+  // Load patients on page load
+  async function loadPatients() {
+    try {
+      const resp = await fetch('/api/v1/patients');
+      if (resp.ok) {
+        const data = await resp.json();
+        patientsList = data.patients || [];
+        populatePatientSelect();
+      }
+    } catch (err) {
+      console.error('Failed to load patients:', err);
+    }
+  }
+
+  function populatePatientSelect() {
+    const select = document.getElementById('patientSelect');
+    select.innerHTML = '<option value="">-- Select a patient --</option>';
+    patientsList.forEach(patient => {
+      const option = document.createElement('option');
+      option.value = patient.patient_id;
+      option.textContent = `${patient.full_name} (Age: ${patient.age})`;
+      select.appendChild(option);
+    });
+  }
+
+  // Toggle between select existing and create new
+  document.getElementById('selectExistingBtn').addEventListener('click', function() {
+    this.classList.remove('border', 'text-gray-700', 'hover:bg-gray-50');
+    this.classList.add('border-2', 'border-indigo-500', 'bg-indigo-500', 'text-white');
+    document.getElementById('createNewBtn').classList.remove('border-2', 'border-indigo-500', 'bg-indigo-500', 'text-white');
+    document.getElementById('createNewBtn').classList.add('border', 'text-gray-700', 'hover:bg-gray-50');
+    document.getElementById('selectExistingSection').classList.remove('hidden');
+    document.getElementById('createNewSection').classList.add('hidden');
+  });
+
+  document.getElementById('createNewBtn').addEventListener('click', function() {
+    this.classList.remove('border', 'text-gray-700', 'hover:bg-gray-50');
+    this.classList.add('border-2', 'border-indigo-500', 'bg-indigo-500', 'text-white');
+    document.getElementById('selectExistingBtn').classList.remove('border-2', 'border-indigo-500', 'bg-indigo-500', 'text-white');
+    document.getElementById('selectExistingBtn').classList.add('border', 'text-gray-700', 'hover:bg-gray-50');
+    document.getElementById('selectExistingSection').classList.add('hidden');
+    document.getElementById('createNewSection').classList.remove('hidden');
+    document.getElementById('patientSelect').value = '';
+    selectedPatientId = null;
+    document.getElementById('selectedPatientInfo').classList.add('hidden');
+  });
+
+  // Handle patient selection
+  document.getElementById('patientSelect').addEventListener('change', function() {
+    selectedPatientId = this.value;
+    const patient = patientsList.find(p => p.patient_id === this.value);
+    if (patient) {
+      document.getElementById('selectedPatientName').textContent = patient.full_name;
+      document.getElementById('selectedPatientDetails').textContent = `Age: ${patient.age} | HPV: ${patient.hpv_status}`;
+      document.getElementById('selectedPatientInfo').classList.remove('hidden');
+    } else {
+      document.getElementById('selectedPatientInfo').classList.add('hidden');
+    }
+  });
+
+  // Create new patient
+  document.getElementById('savePatientBtn').addEventListener('click', async function() {
+    const firstName = document.getElementById('patientFirstName').value.trim();
+    const lastName = document.getElementById('patientLastName').value.trim();
+    const age = parseInt(document.getElementById('patientAge').value);
+    const gender = document.getElementById('patientGender').value;
+    const phone = document.getElementById('patientPhone').value.trim();
+    const hpv = document.getElementById('patientHPV').value;
+
+    if (!firstName || !lastName || !age || !gender) {
+      alert('Please fill in all required fields (marked with *)');
+      return;
+    }
+
+    const btn = this;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-pulse">Saving...</span>';
+
+    try {
+      const resp = await fetch('/api/v1/patients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          age: age,
+          gender: gender,
+          phone: phone,
+          hpv_status: hpv
+        })
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok) {
+        // Refresh patients list and select the new patient
+        await loadPatients();
+        selectedPatientId = data.patient.patient_id;
+        document.getElementById('patientSelect').value = selectedPatientId;
+
+        // Switch to select view
+        document.getElementById('selectExistingBtn').click();
+        document.getElementById('selectedPatientName').textContent = data.patient.full_name;
+        document.getElementById('selectedPatientDetails').textContent = `Age: ${data.patient.age} | HPV: ${data.patient.hpv_status}`;
+        document.getElementById('selectedPatientInfo').classList.remove('hidden');
+
+        // Clear form
+        document.getElementById('patientFirstName').value = '';
+        document.getElementById('patientLastName').value = '';
+        document.getElementById('patientAge').value = '';
+        document.getElementById('patientGender').value = '';
+        document.getElementById('patientPhone').value = '';
+        document.getElementById('patientHPV').value = 'unknown';
+      } else {
+        alert('Failed to create patient: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Failed to create patient: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
+
+  // Load patients when page loads
+  loadPatients();
+
+  // === IMAGE COMPRESSION UTILITY ===
+  // Compress with timeout and progress callback
+  async function compressImage(file, maxSizeMB = 1, progressCallback = null) {
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    const COMPRESSION_TIMEOUT = 30000; // 30 seconds per image
+
+    return Promise.race([
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          const img = new Image();
+
+          img.onload = () => {
+            // Lower max dimension for faster compression
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 1280; // Reduced from 1920 for faster processing
+
+            if (width > maxDim || height > maxDim) {
+              const ratio = Math.min(maxDim / width, maxDim / height);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+
+            // Create canvas and resize
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Simplified compression - try fewer attempts
+            let quality = 0.75; // Start with lower quality for speed
+            const extension = file.type.includes('png') ? 'jpg' : 'jpg'; // Always use JPG for better compression
+
+            const tryCompress = (attempts = 0) => {
+              canvas.toBlob((resultBlob) => {
+                if (!resultBlob) {
+                  reject(new Error('Compression failed'));
+                  return;
+                }
+
+                // If still too large and quality > 0.4, reduce quality (max 4 attempts instead of 10)
+                if (resultBlob.size > maxSizeBytes && quality > 0.4 && attempts < 4) {
+                  quality -= 0.15;
+                  tryCompress(attempts + 1);
+                  return;
+                }
+
+                // Create File object
+                const newName = file.name.replace(/\.[^/.]+$/, '') + '_compressed.jpg';
+                const compressedFile = new File([resultBlob], newName, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                });
+
+                resolve(compressedFile);
+              }, 'image/jpeg', quality);
+            };
+
+            tryCompress();
+          };
+
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = e.target.result;
+        };
+
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Compression timeout')), COMPRESSION_TIMEOUT)
+      )
+    ]);
+  }
+
   // File preview - show count if multiple files selected
-  document.getElementById('fileInput').addEventListener('change', function () {
+  document.getElementById('fileInput').addEventListener('change', async function () {
 
       const files = Array.from(this.files);
 
@@ -186,8 +483,126 @@
           return;
       }
 
+      // === AUTO COMPRESS IMAGES ===
+      // Compress images larger than 500KB to max 1MB
+      const compressBtn = document.getElementById('submitBtn');
+      const compressBtnText = document.getElementById('btnText');
+      const errorMsg = document.getElementById('errorMsg');
+      let progressElement = null; // Declare once here
+
+      // Calculate original size
+      const originalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
+      const filesToCompress = imageFiles.filter(f => f.size > 500 * 1024);
+
+      if (filesToCompress.length > 0) {
+          // Skip compression if too many files (performance)
+          if (filesToCompress.length > 50) {
+              console.log(`[COMPRESS] Skipping compression for ${filesToCompress.length} large files (too many)`);
+          } else {
+              // Add progress indicator element for compression
+              progressElement = document.createElement('div');
+              progressElement.id = 'compressionProgress';
+              progressElement.className = 'p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 mb-3 flex items-center gap-2';
+              progressElement.innerHTML = `
+                <svg class="w-5 h-5 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span id="compressionStatus">Preparing compression...</span>
+              `;
+
+              // Show compression progress
+              compressBtn.disabled = true;
+              const form = document.getElementById('analyzeForm');
+              form.insertBefore(progressElement, form.firstChild);
+              compressBtnText.textContent = `Compressing ${filesToCompress.length} image${filesToCompress.length > 1 ? 's' : ''}...`;
+          }
+      }
+
+      // Compress images SEQUENTIALLY (one at a time) instead of parallel
+      const compressedImages = [];
+      for (let i = 0; i < imageFiles.length; i++) {
+          const file = imageFiles[i];
+
+          // Skip if already small enough (< 500KB)
+          if (file.size <= 500 * 1024) {
+              console.log(`[COMPRESS] ${file.name} (${(file.size/1024).toFixed(1)}KB) - skipped (already small)`);
+              compressedImages.push(file);
+              continue;
+          }
+
+          // Skip compression if we chose to skip due to too many files
+          if (filesToCompress.length > 50) {
+              compressedImages.push(file);
+              continue;
+          }
+
+          // Update progress
+          const progressStatus = document.getElementById('compressionStatus');
+          if (progressStatus) {
+              progressStatus.textContent = `Compressing ${i + 1}/${imageFiles.length}...`;
+          }
+
+          try {
+              const compressed = await compressImage(file, 1024 * 1024); // Max 1MB
+              const savings = ((file.size - compressed.size) / file.size * 100).toFixed(1);
+              console.log(`[COMPRESS] ${file.name}: ${(file.size/1024).toFixed(1)}KB → ${(compressed.size/1024).toFixed(1)}KB (${savings}% reduction)`);
+              compressedImages.push(compressed);
+          } catch (err) {
+              console.error(`[COMPRESS] Failed to compress ${file.name}:`, err);
+              compressedImages.push(file); // Return original if compression fails
+          }
+      }
+
+      // Update the file input with compressed files
+      const dt = new DataTransfer();
+      compressedImages.forEach(file => dt.items.add(file));
+      this.files = dt.files;
+
+      // Calculate compressed size
+      const compressedSize = compressedImages.reduce((sum, f) => sum + f.size, 0);
+      const savingsMB = ((originalSize - compressedSize) / 1024 / 1024).toFixed(1);
+      const savingsPct = ((originalSize - compressedSize) / originalSize * 100).toFixed(0);
+
+      // Reset button state
+      compressBtn.disabled = false;
+      compressBtnText.textContent = compressedImages.length > 1 ? `Analyze ${compressedImages.length} Images` : 'Run AI Analysis';
+
+      // Remove compression progress element
+      const compressionProgressEl = document.getElementById('compressionProgress');
+      if (compressionProgressEl) {
+          compressionProgressEl.remove();
+      }
+
+      // Show compression success message only if compression actually happened
+      if (savingsPct > 0 && filesToCompress.length <= 50) {
+          const successMsg = document.createElement('div');
+          successMsg.className = 'p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 mb-3 flex items-center gap-2';
+          successMsg.innerHTML = `
+              <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span>✓ Compressed: ${savingsPct}% smaller (${savingsMB} MB saved)</span>
+          `;
+          const form = document.getElementById('analyzeForm');
+          form.insertBefore(successMsg, form.firstChild);
+
+          // Auto-remove after 5 seconds
+          setTimeout(() => successMsg.remove(), 5000);
+      }
+
+      // Update imageFiles to use compressed versions
+      const finalImageFiles = Array.from(this.files);
+
+      if (finalImageFiles.length === 0) {
+          document.getElementById('errorMsg').textContent =
+              'No image files found. Please select JPEG, PNG, BMP, or TIFF files.';
+          document.getElementById('errorMsg').classList.remove('hidden');
+          return;
+      }
+
       // Check total upload size
-      const totalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
+      const totalSize = finalImageFiles.reduce((sum, f) => sum + f.size, 0);
 
       if (totalSize > MAX_TOTAL_SIZE) {
           alert('Total upload size exceeds 1GB.');
@@ -199,7 +614,7 @@
       const content = document.getElementById('dropContent');
       const fileLabel = document.getElementById('fileLabel');
 
-      uploadedFileURLs = imageFiles.map(file =>
+      uploadedFileURLs = finalImageFiles.map(file =>
           URL.createObjectURL(file)
       );
 
@@ -216,18 +631,18 @@
       previewContainer.classList.remove('hidden');
       content.classList.add('hidden');
 
-      if (imageFiles.length === 1) {
-          fileLabel.textContent = imageFiles[0].name;
+      if (finalImageFiles.length === 1) {
+          fileLabel.textContent = finalImageFiles[0].name;
       } else {
           fileLabel.textContent =
-              `📁 ${imageFiles.length} images selected`;
+              `📁 ${finalImageFiles.length} images selected (${(totalSize/1024/1024).toFixed(1)} MB)`;
       }
 
       const btnText = document.getElementById('btnText');
 
       btnText.textContent =
-          imageFiles.length > 1
-              ? `Analyze ${imageFiles.length} Images`
+          finalImageFiles.length > 1
+              ? `Analyze ${finalImageFiles.length} Images`
               : 'Run AI Analysis';
 
       document.getElementById('errorMsg').classList.add('hidden');
@@ -323,7 +738,33 @@
       formData.append('file', file);
     }
 
+    // Add patient_id if selected
+    if (selectedPatientId) {
+      formData.append('patient_id', selectedPatientId);
+      console.log(`[LOG] Selected patient: ${selectedPatientId}`);
+    }
+
     console.log(`[LOG] FormData ready with ${imageFiles.length} files`);
+
+    // Calculate total upload size
+    const totalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
+    const totalSizeMB = totalSize / (1024 * 1024);
+
+    // Choose endpoint based on file count and size
+    // Use VPS endpoint for: 5+ images OR total size > 50MB
+    let apiUrl = '/api/v1/analyze';
+    let useVPS = false;
+
+    if (imageFiles.length >= 5 || totalSizeMB > 50) {
+      apiUrl = '/api/v1/analyze/vps?skip_heatmap=true';
+      useVPS = true;
+      console.log(`[LOG] Using VPS-optimized endpoint (${imageFiles.length} images, ${totalSizeMB.toFixed(1)} MB)`);
+    } else if (imageFiles.length >= 3 || totalSizeMB > 20) {
+      apiUrl = '/api/v1/analyze/fast?skip_heatmap=true';
+      console.log(`[LOG] Using fast endpoint (${imageFiles.length} images, ${totalSizeMB.toFixed(1)} MB)`);
+    } else {
+      console.log(`[LOG] Using standard endpoint (${imageFiles.length} images, ${totalSizeMB.toFixed(1)} MB)`);
+    }
 
     try {
       const controller = new AbortController();
@@ -332,19 +773,64 @@
           controller.abort();
       }, REQUEST_TIMEOUT);
 
-      const resp = await fetch('/api/v1/analyze', {
+      const resp = await fetch(apiUrl, {
           method: 'POST',
           body: formData,
           signal: controller.signal
       });
 
       clearTimeout(timeoutId);
+
+      // Check if response is OK before trying to parse JSON
+      if (!resp.ok) {
+          const contentType = resp.headers.get('content-type');
+          let errorMsg = `Server error ${resp.status}`;
+
+          // Try to get more detailed error message
+          if (contentType && contentType.includes('application/json')) {
+              const errorData = await resp.json().catch(() => ({}));
+              errorMsg = errorData.error || errorData.message || errorMsg;
+          } else {
+              // Server returned HTML error page
+              const errorText = await resp.text();
+              console.error('[SERVER ERROR]', errorText.substring(0, 500));
+              errorMsg = `Server error ${resp.status}. Check server logs for details.`;
+          }
+
+          throw new Error(errorMsg);
+      }
+
       const data = await resp.json();
 
       console.log(`[LOG] Response received. OK: ${resp.ok}, Status: ${resp.status}`);
       console.log(`[LOG] Images analyzed: ${data.images_analyzed}`);
 
-      if (!resp.ok) throw new Error(data.error || 'Analysis failed');
+      if (!resp.ok) {
+          // If VPS endpoint fails, try regular endpoint as fallback
+          if (useVPS && imageFiles.length < 10) {
+              console.log('[LOG] VPS endpoint failed, trying regular endpoint as fallback...');
+              errorMsg.textContent = 'VPS service unavailable, retrying with standard endpoint...';
+              errorMsg.classList.remove('hidden');
+
+              // Retry with regular endpoint
+              const fallbackResp = await fetch('/api/v1/analyze', {
+                  method: 'POST',
+                  body: formData,
+                  signal: controller.signal
+              });
+
+              if (!fallbackResp.ok) {
+                  throw new Error(data.error || 'Analysis failed on both endpoints');
+              }
+
+              const fallbackData = await fallbackResp.json();
+              prog.finishProgress();
+              setTimeout(() => prog.wrapper.classList.add('hidden'), 2000);
+              renderResult(fallbackData);
+              return;
+          }
+          throw new Error(data.error || 'Analysis failed');
+      }
 
       // Finish progress
       prog.finishProgress();
@@ -352,19 +838,17 @@
 
       renderResult(data);
     } catch (err) {
-
-    if (err.name === 'AbortError') {
-        errorMsg.textContent =
-            'Request timed out. Large batch processing exceeded 30 minutes.';
-    } else {
-        errorMsg.textContent = err.message;
-    }
-
-    console.error('[ERROR]', err);
-      console.error(`[ERROR] ${err.message}`);
+      // Handle error
       clearInterval(prog.interval);
       prog.wrapper.classList.add('hidden');
-      errorMsg.textContent = err.message;
+
+      if (err.name === 'AbortError') {
+        errorMsg.textContent = 'Request timed out. Large batch processing exceeded 30 minutes.';
+      } else {
+        errorMsg.textContent = err.message;
+      }
+
+      console.error('[ERROR]', err);
       errorMsg.classList.remove('hidden');
     } finally {
       btn.disabled = false;

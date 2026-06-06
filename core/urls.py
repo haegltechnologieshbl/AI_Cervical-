@@ -21,14 +21,27 @@ urlpatterns = [
     path("admin/registered-users/", views.AdminRegisteredUsersView.as_view(), name="admin-registered-users"),
     path("admin/test-results/", views.AdminTestResultsView.as_view(), name="admin-test-results"),
     path("admin/test-history/", views.AdminTestHistoryView.as_view(), name="admin-test-history"),
+    path("admin/patients/", views.AdminPatientsView.as_view(), name="admin-patients"),
+    path("admin/patient/<uuid:patient_id>", views.AdminPatientProfileView.as_view(), name="admin-patient-profile"),
+    path("patients/", views.PatientManagementView.as_view(), name="patient-management"),
+    path("patient/<uuid:patient_id>", views.PatientProfileView.as_view(), name="patient-profile"),
+    path("patient/add/", views.AddPatientView.as_view(), name="add-patient"),
 
     # --- REST API ---
     path("api/v1/analyze", views.AnalyzeView.as_view(), name="analyze"),
     path("api/v1/analyze/fast", views.FastAnalyzeView.as_view(), name="analyze-fast"),
+    path("api/v1/analyze/vps", views.VPSAnalyzeView.as_view(), name="analyze-vps"),
     path("api/v1/analyze/<uuid:analysis_id>", views.AnalysisApiDetailView.as_view(), name="analyze-detail"),
     path("api/v1/reports/generate", views.ReportView.as_view(), name="report-generate"),
     path("api/v1/health", views.HealthView.as_view(), name="health"),
     path("api/v1/stats", views.StatsView.as_view(), name="stats"),
+
+    # --- Patient Management API ---
+    path("api/v1/patients", views.PatientListAPIView.as_view(), name="patient-list"),
+    path("api/v1/patients", views.PatientCreateAPIView.as_view(), name="patient-create"),
+    path("api/v1/patients/<uuid:patient_id>", views.PatientDetailAPIView.as_view(), name="patient-detail"),
+    path("api/v1/patients/<uuid:patient_id>/history", views.PatientHistoryAPIView.as_view(), name="patient-history"),
+    path("api/v1/patients/<uuid:patient_id>/stats", views.PatientStatsAPIView.as_view(), name="patient-stats"),
 
     # --- Authentication API ---
     path("api/v1/auth/register", views.RegisterView.as_view(), name="register"),

@@ -14,10 +14,12 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Analysis
-from .serializers import AnalysisSerializer, AnalyzeRequestSerializer
+from .models import Analysis, Patient
+from .serializers import AnalysisSerializer, AnalyzeRequestSerializer, PatientSerializer, PatientListSerializer
 from services.inference import InferenceService
 from services.inference_fast import FastInferenceService
+from services.inference_vps import VPSInferenceService
+from services.inference_ultra import UltraFastInferenceService
 import cv2
 import numpy as np
 import os
@@ -200,6 +202,159 @@ class AnalysisApiDetailView(APIView):
             return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response(AnalysisSerializer(analysis).data)
 
+
+
+# ─── Patient Management Views ───────────────────────────────────────────────────
+
+class PatientManagementView(View):
+    """GET /patients/ - Patient management page for current doctor"""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/patients/')
+
+        patients = Patient.objects.filter(
+            created_by=request.user
+        ).order_by('-created_at')
+
+        # Statistics
+        total_patients = patients.count()
+        from django.utils import timezone
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        recent_patients = patients.filter(created_at__gte=seven_days_ago).count()
+
+        # Count patients with analyses
+        patients_with_analyses = 0
+        for patient in patients:
+            if patient.analyses.exists():
+                patients_with_analyses += 1
+
+        context = {
+            'patients': patients,
+            'total_patients': total_patients,
+            'recent_patients': recent_patients,
+            'patients_with_analyses': patients_with_analyses,
+        }
+        return render(request, "patients.html", context)
+
+
+class AddPatientView(View):
+    """GET /patient/add/ - Add new patient page"""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/patient/add/')
+        return render(request, "add_patient.html")
+
+
+class PatientProfileView(View):
+    """GET /patient/<patient_id> - Patient profile with analysis history"""
+    def get(self, request, patient_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/patient/' + str(patient_id))
+
+        try:
+            patient = Patient.objects.get(
+                patient_id=patient_id,
+                created_by=request.user
+            )
+        except Patient.DoesNotExist:
+            return redirect('/patients/')
+
+        analyses = Analysis.objects.filter(
+            patient=patient
+        ).order_by('-created_at')
+
+        total_analyses = analyses.count()
+        if total_analyses > 0:
+            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
+            latest_analysis = analyses.first()
+        else:
+            avg_confidence = 0
+            latest_analysis = None
+
+        context = {
+            'patient': patient,
+            'analyses': analyses,
+            'total_analyses': total_analyses,
+            'avg_confidence': round(avg_confidence * 100, 2),
+            'latest_analysis': latest_analysis,
+        }
+        return render(request, "patient_profile.html", context)
+
+
+class AdminPatientsView(View):
+    """GET /admin/patients/ - All patients (admin view)"""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/patients/')
+
+        if request.user.profile.role != 'admin':
+            return redirect('/patients/')
+
+        patients = Patient.objects.select_related(
+            'created_by', 'created_by__profile'
+        ).all().order_by('-created_at')
+
+        # Statistics
+        total_patients = patients.count()
+        from django.utils import timezone
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        recent_patients = patients.filter(created_at__gte=seven_days_ago).count()
+
+        # Count patients with analyses
+        patients_with_analyses = 0
+        for patient in patients:
+            if patient.analyses.exists():
+                patients_with_analyses += 1
+
+        from django.core.paginator import Paginator
+        paginator = Paginator(patients, 25)
+        page_number = request.GET.get('page')
+        patients_page = paginator.get_page(page_number)
+
+        context = {
+            'patients': patients_page,
+            'total_patients': total_patients,
+            'recent_patients': recent_patients,
+            'patients_with_analyses': patients_with_analyses,
+        }
+        return render(request, "admin_patients.html", context)
+
+
+class AdminPatientProfileView(View):
+    """GET /admin/patient/<patient_id> - Admin view of patient profile"""
+    def get(self, request, patient_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/patient/' + str(patient_id))
+
+        if request.user.profile.role != 'admin':
+            return redirect('/admin/')
+
+        try:
+            patient = Patient.objects.get(patient_id=patient_id)
+        except Patient.DoesNotExist:
+            return redirect('/admin/patients/')
+
+        analyses = Analysis.objects.filter(
+            patient=patient
+        ).order_by('-created_at')
+
+        total_analyses = analyses.count()
+        if total_analyses > 0:
+            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
+            latest_analysis = analyses.first()
+        else:
+            avg_confidence = 0
+            latest_analysis = None
+
+        context = {
+            'patient': patient,
+            'analyses': analyses,
+            'total_analyses': total_analyses,
+            'avg_confidence': round(avg_confidence * 100, 2),
+            'latest_analysis': latest_analysis,
+            'user_role': 'admin',
+        }
+        return render(request, "admin_patient_profile.html", context)
 
 
 # ─── Authentication Views (API) ────────────────────────────────────────────────
@@ -421,6 +576,199 @@ class ChangePasswordView(APIView):
 
         return Response({
             "message": "Password changed successfully"
+        }, status=status.HTTP_200_OK)
+
+
+# ─── Patient Management Views (API) ─────────────────────────────────────────────
+
+class PatientListAPIView(APIView):
+    """GET /api/v1/patients - List all patients for the current doctor"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        patients = Patient.objects.filter(
+            created_by=request.user
+        ).order_by('-created_at')
+
+        serializer = PatientListSerializer(patients, many=True)
+        return Response({
+            "patients": serializer.data,
+            "total": patients.count()
+        }, status=status.HTTP_200_OK)
+
+
+class PatientCreateAPIView(APIView):
+    """POST /api/v1/patients - Create a new patient"""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        serializer = PatientSerializer(data=request.data)
+        if serializer.is_valid():
+            # Set the created_by to current user
+            serializer.validated_data['created_by'] = request.user
+            patient = serializer.save()
+            return Response({
+                "message": "Patient created successfully",
+                "patient": PatientSerializer(patient).data
+            }, status=status.HTTP_201_CREATED)
+        return Response({
+            "error": "Invalid data",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PatientDetailAPIView(APIView):
+    """GET/PUT/DELETE /api/v1/patients/<patient_id> - Get, update or delete a patient"""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def get(self, request, patient_id):
+        try:
+            patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+        except Patient.DoesNotExist:
+            return Response({
+                "error": "Patient not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatientSerializer(patient)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request, patient_id):
+        try:
+            patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+        except Patient.DoesNotExist:
+            return Response({
+                "error": "Patient not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatientSerializer(patient, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "message": "Patient updated successfully",
+                "patient": PatientSerializer(patient).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "error": "Invalid data",
+            "details": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, patient_id):
+        try:
+            patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+        except Patient.DoesNotExist:
+            return Response({
+                "error": "Patient not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        patient_name = patient.full_name
+        patient.delete()
+        return Response({
+            "message": f"Patient '{patient_name}' deleted successfully"
+        }, status=status.HTTP_200_OK)
+
+
+class PatientHistoryAPIView(APIView):
+    """GET /api/v1/patients/<patient_id>/history - Get all analyses for a patient"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id):
+        try:
+            patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+        except Patient.DoesNotExist:
+            return Response({
+                "error": "Patient not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        analyses = Analysis.objects.filter(
+            patient=patient
+        ).order_by('-created_at')
+
+        # Calculate statistics
+        total_analyses = analyses.count()
+        if total_analyses > 0:
+            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
+            avg_uncertainty = sum(a.uncertainty for a in analyses) / total_analyses
+
+            # Severity distribution
+            severity_counts = {}
+            for analysis in analyses:
+                label = analysis.predicted_label
+                severity_counts[label] = severity_counts.get(label, 0) + 1
+        else:
+            avg_confidence = 0
+            avg_uncertainty = 0
+            severity_counts = {}
+
+        # Serialize analyses with full details
+        analyses_data = []
+        for analysis in analyses:
+            analyses_data.append({
+                "analysis_id": str(analysis.analysis_id),
+                "predicted_class": analysis.predicted_class,
+                "predicted_label": analysis.predicted_label,
+                "confidence": round(analysis.confidence * 100, 2),
+                "uncertainty": round(analysis.uncertainty * 100, 2),
+                "confidence_level": analysis.confidence_level,
+                "recommendation": analysis.recommendation,
+                "image_url": analysis.image.url if analysis.image else None,
+                "created_at": analysis.created_at.isoformat(),
+            })
+
+        return Response({
+            "patient": PatientListSerializer(patient).data,
+            "statistics": {
+                "total_analyses": total_analyses,
+                "avg_confidence": round(avg_confidence * 100, 2),
+                "avg_uncertainty": round(avg_uncertainty * 100, 2),
+                "severity_distribution": severity_counts
+            },
+            "analyses": analyses_data
+        }, status=status.HTTP_200_OK)
+
+
+class PatientStatsAPIView(APIView):
+    """GET /api/v1/patients/<patient_id>/stats - Get trend statistics for a patient"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id):
+        try:
+            patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+        except Patient.DoesNotExist:
+            return Response({
+                "error": "Patient not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        analyses = Analysis.objects.filter(
+            patient=patient
+        ).order_by('created_at')
+
+        # Prepare trend data
+        trend_data = []
+        for analysis in analyses:
+            trend_data.append({
+                "date": analysis.created_at.isoformat(),
+                "predicted_class": analysis.predicted_class,
+                "predicted_label": analysis.predicted_label,
+                "confidence": round(analysis.confidence * 100, 2),
+                "uncertainty": round(analysis.uncertainty * 100, 2),
+            })
+
+        # Calculate trend summary
+        if len(trend_data) >= 2:
+            first_result = trend_data[0]
+            last_result = trend_data[-1]
+            trend_direction = "improving" if last_result["predicted_class"] < first_result["predicted_class"] else "worsening" if last_result["predicted_class"] > first_result["predicted_class"] else "stable"
+        else:
+            trend_direction = "insufficient_data"
+
+        return Response({
+            "patient_id": str(patient.patient_id),
+            "patient_name": patient.full_name,
+            "total_analyses": len(trend_data),
+            "trend_direction": trend_direction,
+            "trend_data": trend_data
         }, status=status.HTTP_200_OK)
 
 
@@ -969,9 +1317,19 @@ class AnalyzeView(APIView):
                 for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation"):
                     extra_fields[key] = prediction.pop(key)
 
+                # Get patient_id from request
+                patient_id = request.data.get('patient_id')
+                patient = None
+                if patient_id:
+                    try:
+                        patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+                    except Patient.DoesNotExist:
+                        print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
+
                 image_file.seek(0)
                 analysis = Analysis.objects.create(
                     created_by=request.user,
+                    patient=patient,
                     image=image_file,
                     **prediction,
                 )
@@ -1087,9 +1445,19 @@ class FastAnalyzeView(APIView):
                 for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation"):
                     extra_fields[key] = prediction.pop(key)
 
+                # Get patient_id from request
+                patient_id = request.data.get('patient_id')
+                patient = None
+                if patient_id:
+                    try:
+                        patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+                    except Patient.DoesNotExist:
+                        print(f"[FAST][WARN] Patient {patient_id} not found, proceeding without patient link")
+
                 image_file.seek(0)
                 analysis = Analysis.objects.create(
                     created_by=request.user,
+                    patient=patient,
                     image=image_file,
                     **prediction,
                 )
@@ -1132,6 +1500,127 @@ class FastAnalyzeView(APIView):
         }
 
         return Response(resp, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VPSAnalyzeView(APIView):
+    """POST /api/v1/analyze/vps - VPS-optimized analysis for large images.
+    Ultra-fast processing for slow VPS servers."""
+    parser_classes = [MultiPartParser]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        files = request.FILES.getlist('file')
+        MAX_FILES = 200
+
+        if len(files) > MAX_FILES:
+            return Response(
+                {"error": f"Maximum {MAX_FILES} images allowed"},
+                status=400
+            )
+        if not files:
+            return Response(
+                {"error": "No image files provided"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        print(f"[ULTRA] Received {len(files)} files (Ultra-fast mode)")
+
+        allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
+        svc = UltraFastInferenceService.get()
+
+        if svc.session is None:
+            return Response(
+                {"error": "Model not loaded. Please contact support."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        predictions_list = []
+        analysis_records = []
+
+        for idx, image_file in enumerate(files):
+            if image_file.content_type not in allowed_types:
+                return Response(
+                    {"error": f"File {idx+1}: Unsupported type {image_file.content_type}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                print(f"[ULTRA] Processing {idx+1}/{len(files)}: {image_file.name} ({image_file.size/1024/1024:.1f} MB)")
+                prediction = svc.predict(image_file, skip_heatmap=True)
+                predictions_list.append(prediction)
+
+                # Store in database (only use fields that exist in the model)
+                image_file.seek(0)
+
+                # Get patient_id from request
+                patient_id = request.data.get('patient_id')
+                patient = None
+                if patient_id:
+                    try:
+                        patient = Patient.objects.get(patient_id=patient_id, created_by=request.user)
+                    except Patient.DoesNotExist:
+                        print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
+
+                analysis = Analysis.objects.create(
+                    created_by=request.user,
+                    patient=patient,
+                    image=image_file,
+                    predicted_class=prediction["predicted_class"],
+                    predicted_label=prediction["predicted_label"],
+                    probabilities=prediction["probabilities"],
+                    confidence=prediction["confidence"],
+                    uncertainty=prediction["uncertainty"],
+                    confidence_level=prediction["confidence_level"],
+                    recommendation=prediction["recommendation"],
+                )
+                analysis_records.append(analysis)
+                print(f"[ULTRA] ✓ {idx+1}/{len(files)} complete")
+
+            except RuntimeError as e:
+                return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        print(f"[ULTRA] Averaging {len(predictions_list)} predictions")
+        averaged_prediction = svc.average_predictions(predictions_list)
+
+        # Generate frames for slideshow (only for <= 30 images to save time)
+        frame_urls = []
+        if len(files) <= 30:
+            print(f"[ULTRA] Generating {len(files)} frames for slideshow...")
+            frame_urls = generate_results_frames(
+                analysis_records,
+                predictions_list
+            )
+
+        individual_results = []
+        for record, pred in zip(analysis_records, predictions_list):
+            individual_results.append({
+                "analysis_id": str(record.analysis_id),
+                "predicted_class": pred["predicted_class"],
+                "predicted_label": pred["predicted_label"],
+                "confidence": pred["confidence"],
+                "image_url": record.image.url if record.image else None,
+            })
+
+        return Response({
+            "predicted_class": averaged_prediction["predicted_class"],
+            "predicted_label": averaged_prediction["predicted_label"],
+            "stage_label": averaged_prediction["stage_label"],
+            "probabilities": averaged_prediction["probabilities"],
+            "confidence": averaged_prediction["confidence"],
+            "uncertainty": averaged_prediction["uncertainty"],
+            "confidence_level": averaged_prediction["confidence_level"],
+            "risk_level": averaged_prediction["risk_level"],
+            "risk_color": averaged_prediction["risk_color"],
+            "confidence_interpretation": averaged_prediction["confidence_interpretation"],
+            "recommendation": averaged_prediction["recommendation"],
+            "explanation": averaged_prediction["explanation"],
+            "images_analyzed": len(files),
+            "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
+            "individual_analyses": [str(a.analysis_id) for a in analysis_records],
+            "individual_results": individual_results,
+            "frame_urls": frame_urls,
+        }, status=status.HTTP_201_CREATED)
 
 
 class HealthView(APIView):
