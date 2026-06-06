@@ -3,6 +3,9 @@
 {% block title %}Patients - CerviStage AI{% endblock %}
 
 {% block content %}
+<!-- Toast Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow">
@@ -255,6 +258,45 @@
 </div>
 
 <script>
+// Toast notification functions
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+    };
+    const icons = {
+        success: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>',
+        error: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+        warning: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+        info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+    };
+
+    toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] max-w-md transform transition-all duration-300 translate-x-full opacity-0`;
+    toast.innerHTML = `
+        <div class="flex-shrink-0">${icons[type]}</div>
+        <div class="flex-1 text-sm font-medium">${message}</div>
+        <button onclick="this.parentElement.remove()" class="flex-shrink-0 text-white/80 hover:text-white">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    `;
+
+    document.getElementById('toast-container').appendChild(toast);
+
+    // Animate in
+    setTimeout(() => {
+        toast.classList.remove('translate-x-full', 'opacity-0');
+    }, 10);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
 function showAddModal() {
     document.getElementById('addModal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
@@ -291,22 +333,47 @@ document.getElementById('addPatientForm').addEventListener('submit', async (e) =
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
 
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Adding...';
+    submitBtn.disabled = true;
+
     try {
         const response = await fetch('/api/v1/patients', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
+            credentials: 'include'
         });
 
+        const result = await response.json();
+
         if (response.ok) {
-            hideAddModal();
-            location.reload();
+            showToast('Patient added successfully!', 'success');
+            setTimeout(() => {
+                hideAddModal();
+                location.reload();
+            }, 1000);
         } else {
-            const result = await response.json();
-            alert('Failed to add patient: ' + (result.error || 'Unknown error'));
+            console.error('API Error:', result);
+            if (result.details && typeof result.details === 'object') {
+                // Show validation errors
+                const errors = Object.entries(result.details).map(([field, msgs]) => {
+                    const fieldLabel = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    const errorList = Array.isArray(msgs) ? msgs.join(', ') : msgs;
+                    return `${fieldLabel}: ${errorList}`;
+                }).join('\n');
+                showToast(errors, 'error');
+            } else {
+                showToast(result.error || result.details || 'Failed to add patient', 'error');
+            }
         }
     } catch (error) {
-        alert('Error adding patient');
+        console.error('Fetch error:', error);
+        showToast('Network error: ' + error.message, 'error');
+    } finally {
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
     }
 });
 </script>
