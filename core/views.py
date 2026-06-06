@@ -597,6 +597,7 @@ class PatientListAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PatientCreateAPIView(APIView):
     """POST /api/v1/patients - Create a new patient"""
     permission_classes = [IsAuthenticated]
@@ -618,6 +619,7 @@ class PatientCreateAPIView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PatientDetailAPIView(APIView):
     """GET/PUT/DELETE /api/v1/patients/<patient_id> - Get, update or delete a patient"""
     permission_classes = [IsAuthenticated]
