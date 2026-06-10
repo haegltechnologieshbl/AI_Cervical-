@@ -17,6 +17,7 @@ urlpatterns = [
     path("admin/", views.AdminDashboardView.as_view(), name="admin-dashboard"),
     path("admin/analysis/<uuid:analysis_id>", views.AdminAnalysisDetailView.as_view(), name="admin-analysis-detail"),
     path("admin/users/", views.AdminUsersView.as_view(), name="admin-users"),
+    path("admin/user/<int:user_id>/", views.AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("admin/user/<int:user_id>/history/", views.AdminUserHistoryView.as_view(), name="admin-user-history"),
     path("admin/registered-users/", views.AdminRegisteredUsersView.as_view(), name="admin-registered-users"),
     path("admin/test-results/", views.AdminTestResultsView.as_view(), name="admin-test-results"),
@@ -35,6 +36,7 @@ urlpatterns = [
     path("api/v1/reports/generate", views.ReportView.as_view(), name="report-generate"),
     path("api/v1/health", views.HealthView.as_view(), name="health"),
     path("api/v1/stats", views.StatsView.as_view(), name="stats"),
+    path("api/v1/dashboard/hospital-stats", views.HospitalDashboardStatsView.as_view(), name="hospital-dashboard-stats"),
 
     # --- Patient Management API ---
     path("api/v1/patients", views.PatientListCreateAPIView.as_view(), name="patient-list"),

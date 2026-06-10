@@ -125,33 +125,33 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        {% for analysis in analyses %}
+                        {% for item in analyses_with_pct %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ analysis.created_at|date:"M d, Y H:i" }}
+                                {{ item.analysis.created_at|date:"M d, Y H:i" }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {% if analysis.created_by %}
-                                    {{ analysis.created_by.profile.full_name }}
+                                {% if item.analysis.created_by %}
+                                    {{ item.analysis.created_by.profile.full_name }}
                                 {% else %}
                                     <span class="text-gray-400">Unknown</span>
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    {% if analysis.predicted_class == 0 %}bg-green-100 text-green-800
-                                    {% elif analysis.predicted_class == 4 %}bg-red-100 text-red-800
-                                    {% elif analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
-                                    {% elif analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
+                                    {% if item.analysis.predicted_class == 0 %}bg-green-100 text-green-800
+                                    {% elif item.analysis.predicted_class == 4 %}bg-red-100 text-red-800
+                                    {% elif item.analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
+                                    {% elif item.analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
                                     {% else %}bg-lime-100 text-lime-800{% endif %}">
-                                    {{ analysis.predicted_label }}
+                                    {{ item.analysis.predicted_label }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {% widthratio analysis.confidence 1 100 %}%
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ item.confidence_pct }}%
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <a href="{% url 'admin-analysis-detail' analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
+                                <a href="{% url 'admin-analysis-detail' item.analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900">View Details</a>
                             </td>
                         </tr>
                         {% empty %}

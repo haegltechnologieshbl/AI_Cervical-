@@ -1,354 +1,451 @@
 {% extends "admin_base.html" %}
-{% block title %}{% if user_role == 'admin' %}Admin{% else %}Dashboard{% endif %} - CerviStage AI{% endblock %}
-{% block breadcrumb %}<span class="text-gray-600">Dashboard</span>{% endblock %}
+{% load static %}
+{% block title %}Admin Dashboard - CerviStage AI{% endblock %}
+{% block breadcrumb %}<span class="text-slate-800 font-medium">Overview</span>{% endblock %}
 
 {% block content %}
-<div class="p-6">
-    <!-- Page Header -->
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">{% if user_role == 'admin' %}Admin Dashboard{% else %}My Dashboard{% endif %}</h1>
-        <p class="text-sm text-gray-500">{% if user_role == 'admin' %}System overview and user management{% else %}Your clinical activity overview{% endif %}</p>
+<!-- Welcome Header -->
+<div class="mb-8">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
+      <p class="text-sm text-slate-500 mt-1">Welcome back, {{ request.user.get_full_name|default:request.user.username }}! Here's what's happening today.</p>
     </div>
-
-    {% if user_role == 'admin' %}
-    <!-- ADMIN CONTENT -->
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <!-- Total Users -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Users</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_users }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Total Patients -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Patients</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_patients }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Total Analyses -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Analyses</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_analyses }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Users -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">New Users (30 days)</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ recent_users }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="text-right">
+      <p class="text-sm text-slate-500">Last updated</p>
+      <p class="text-lg font-semibold text-slate-900" id="current-time">-</p>
     </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <!-- Role Distribution -->
-        <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">User Role Distribution</h3>
-                <div class="space-y-3">
-                    {% for item in role_dist %}
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-gray-900 capitalize">{{ item.profile__role|default:"Unknown" }}</span>
-                        </div>
-                        <div class="flex items-center">
-                            <span class="text-sm text-gray-500 mr-2">{{ item.count }} users</span>
-                            <div class="w-32 bg-gray-200 rounded-full h-2">
-                                <div class="bg-indigo-600 h-2 rounded-full" style="width: {% widthratio item.count total_users 100 %}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                    {% empty %}
-                    <p class="text-sm text-gray-500">No users found</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent User Registrations -->
-        <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent User Registrations</h3>
-                <div class="overflow-hidden">
-                    <ul class="divide-y divide-gray-200">
-                        {% for user in recent_user_registrations %}
-                        <li class="py-4">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center">
-                                    <div class="h-8 w-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
-                                        <span class="text-white font-medium text-sm">{{ user.username|first|upper }}</span>
-                                    </div>
-                                    <div class="ml-3">
-                                        <p class="text-sm font-medium text-gray-900">{{ user.get_full_name|default:user.username }}</p>
-                                        <p class="text-xs text-gray-500">{{ user.email }}</p>
-                                    </div>
-                                </div>
-                                <div class="text-right">
-                                    <p class="text-xs text-gray-500">{{ user.date_joined|date:"M d, Y" }}</p>
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                                        {% if user.profile.role == 'admin' %}bg-purple-100 text-purple-800
-                                        {% elif user.profile.role == 'user' %}bg-green-100 text-green-800
-                                        {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                        {{ user.profile.role|title }}
-                                    </span>
-                                </div>
-                            </div>
-                        </li>
-                        {% empty %}
-                        <li class="py-4">
-                            <p class="text-sm text-gray-500">No recent registrations</p>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="bg-white shadow rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent System Activity</h3>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for analysis in recent_analyses %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ analysis.created_at|date:"M d, Y H:i" }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {% if analysis.created_by %}
-                                    <div class="flex items-center">
-                                        <div class="h-6 w-6 bg-blue-100 rounded-full flex items-center justify-center mr-2">
-                                            <span class="text-blue-600 font-medium text-xs">{{ analysis.created_by.username|first|upper }}</span>
-                                        </div>
-                                        {{ analysis.created_by.profile.full_name }}
-                                    </div>
-                                {% else %}
-                                    <span class="text-gray-400">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                                    {% if analysis.predicted_label == 'Normal' %}bg-green-100 text-green-800
-                                    {% elif analysis.predicted_label == 'Carcinoma' %}bg-red-100 text-red-800
-                                    {% elif analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
-                                    {% elif analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
-                                    {% else %}bg-lime-100 text-lime-800{% endif %}">
-                                    {{ analysis.predicted_label }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {% widthratio analysis.confidence 1 100 %}%
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <a href="{% url 'admin-analysis-detail' analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
-                                No activity found
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    {% else %}
-    <!-- CLINICIAN CONTENT -->
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
-        <!-- My Patients -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">My Patients</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_patients }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Total Analyses -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Analyses</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_analyses }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Activity Count -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Recent Activity</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900">{{ total_analyses }}</div>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity Table -->
-    <div class="bg-white shadow rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Your Recent Activity</h3>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for analysis in recent_analyses %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ analysis.created_at|date:"M d, Y H:i" }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {{ analysis.patient.name|default:"Anonymous" }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    {% if analysis.predicted_label == 'Normal' %}bg-green-100 text-green-800
-                                    {% elif analysis.predicted_label == 'Carcinoma' %}bg-red-100 text-red-800
-                                    {% elif analysis.predicted_class == 3 %}bg-orange-100 text-orange-800
-                                    {% elif analysis.predicted_class == 2 %}bg-yellow-100 text-yellow-800
-                                    {% else %}bg-lime-100 text-lime-800{% endif %}">
-                                    {{ analysis.predicted_label }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {% widthratio analysis.confidence 1 100 %}%
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <a href="{% url 'analysis-detail-page' analysis.analysis_id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
-                                No activity found
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
+  </div>
 </div>
+
+<!-- Error Alert (hidden by default) -->
+<div id="dashboard-error-alert" class="hidden mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+  <div class="flex">
+    <div class="flex-shrink-0">
+      <i class="fas fa-exclamation-circle text-red-400"></i>
+    </div>
+    <div class="ml-3">
+      <p class="text-sm text-red-800 error-message">Failed to load dashboard data</p>
+    </div>
+  </div>
+</div>
+
+<!-- Statistics Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <!-- Total Patients Card -->
+  <div class="stat-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Total Patients</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2" id="total-patients">-</p>
+          <p class="text-xs text-slate-500 mt-1">Registered in system</p>
+        </div>
+        <div class="h-14 w-14 bg-indigo-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-hospital-user text-2xl text-indigo-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center text-sm">
+        <span class="text-green-600 font-medium flex items-center">
+          <i class="fas fa-arrow-up mr-1"></i>
+          <span id="new-patients-today">-</span>
+        </span>
+        <span class="text-slate-500 ml-2">new today</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Patients Screened Card -->
+  <div class="stat-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Patients Screened</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2" id="total-screened">-</p>
+          <p class="text-xs text-slate-500 mt-1">Completed screenings</p>
+        </div>
+        <div class="h-14 w-14 bg-green-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-clipboard-check text-2xl text-green-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center text-sm">
+        <div class="flex-1 bg-slate-200 rounded-full h-2">
+          <div class="bg-green-600 h-2 rounded-full" id="screening-progress" style="width: 0%"></div>
+        </div>
+        <span class="text-slate-500 ml-2" id="screening-rate">-%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- High Risk Patients Card -->
+  <div class="stat-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">High Risk Patients</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2" id="high-risk-patients">-</p>
+          <p class="text-xs text-slate-500 mt-1">Require attention</p>
+        </div>
+        <div class="h-14 w-14 bg-red-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center text-sm">
+        <span class="text-red-600 font-medium">Priority Action Needed</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detection Rate Card -->
+  <div class="stat-card bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Detection Rate</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2"><span id="detection-rate">-</span>%</p>
+          <p class="text-xs text-slate-500 mt-1">This month</p>
+        </div>
+        <div class="h-14 w-14 bg-purple-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-chart-pie text-2xl text-purple-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center text-sm">
+        <span class="text-purple-600 font-medium">Positive cases</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Case Statistics Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <!-- Positive Cases -->
+  <div class="stat-card bg-gradient-to-r from-orange-500 to-red-500 rounded-xl shadow-sm overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between text-white">
+        <div>
+          <p class="text-sm font-medium text-orange-100">Positive Cases</p>
+          <p class="text-3xl font-bold mt-2" id="positive-cases">-</p>
+        </div>
+        <div class="h-12 w-12 bg-white/20 rounded-lg flex items-center justify-center">
+          <i class="fas fa-virus text-xl text-white"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Negative Cases -->
+  <div class="stat-card bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl shadow-sm overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between text-white">
+        <div>
+          <p class="text-sm font-medium text-green-100">Negative Cases</p>
+          <p class="text-3xl font-bold mt-2" id="negative-cases">-</p>
+        </div>
+        <div class="h-12 w-12 bg-white/20 rounded-lg flex items-center justify-center">
+          <i class="fas fa-check-shield text-xl text-white"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Appointments -->
+  <div class="stat-card bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl shadow-sm overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between text-white">
+        <div>
+          <p class="text-sm font-medium text-blue-100">Today's Appointments</p>
+          <p class="text-3xl font-bold mt-2" id="todays-appointments">-</p>
+        </div>
+        <div class="h-12 w-12 bg-white/20 rounded-lg flex items-center justify-center">
+          <i class="fas fa-calendar-check text-xl text-white"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending Follow-ups -->
+  <div class="stat-card bg-gradient-to-r from-yellow-500 to-amber-500 rounded-xl shadow-sm overflow-hidden">
+    <div class="p-6">
+      <div class="flex items-center justify-between text-white">
+        <div>
+          <p class="text-sm font-medium text-yellow-100">Pending Follow-ups</p>
+          <p class="text-3xl font-bold mt-2" id="follow-ups-pending">-</p>
+        </div>
+        <div class="h-12 w-12 bg-white/20 rounded-lg flex items-center justify-center">
+          <i class="fas fa-clock text-xl text-white"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+  <!-- Stage Distribution Chart -->
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6 border-b border-slate-200">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-semibold text-slate-900">Stage Distribution</h3>
+          <p class="text-sm text-slate-500 mt-1">Analysis results by stage</p>
+        </div>
+        <button class="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
+          <i class="fas fa-download mr-1"></i> Export
+        </button>
+      </div>
+    </div>
+    <div class="p-6">
+      <canvas id="stageDistributionChart" height="250"></canvas>
+    </div>
+  </div>
+
+  <!-- Monthly Detection Trend -->
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="p-6 border-b border-slate-200">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-semibold text-slate-900">Detection Trend</h3>
+          <p class="text-sm text-slate-500 mt-1">Monthly positive case rate</p>
+        </div>
+        <select class="text-sm border border-slate-300 rounded-lg px-3 py-1.5">
+          <option>Last 6 months</option>
+          <option>Last 12 months</option>
+        </select>
+      </div>
+    </div>
+    <div class="p-6">
+      <canvas id="detectionRateChart" height="250"></canvas>
+    </div>
+  </div>
+</div>
+
+
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/dashboard-charts.js' %}"></script>
+<script>
+// Update current time
+function updateTime() {
+  const now = new Date();
+  const options = {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  };
+  document.getElementById('current-time').textContent = now.toLocaleDateString('en-US', options);
+}
+
+// Load dashboard statistics
+async function loadDashboardStats() {
+  try {
+    const response = await fetch('/api/v1/dashboard/hospital-stats', {
+      credentials: 'include',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken')
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error:', errorText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const stats = await response.json();
+    console.log('Dashboard stats loaded:', stats);
+
+    // Update patient statistics
+    updateStat('total-patients', stats.patient_stats?.total_registered);
+    updateStat('total-screened', stats.patient_stats?.total_screened);
+    updateStat('high-risk-patients', stats.patient_stats?.high_risk);
+    updateStat('new-patients-today', stats.patient_stats?.recent_visits);
+
+    // Update screening progress
+    if (stats.patient_stats?.total_registered > 0) {
+      const screeningRate = (stats.patient_stats.total_screened / stats.patient_stats.total_registered * 100).toFixed(1);
+      document.getElementById('screening-progress').style.width = screeningRate + '%';
+      document.getElementById('screening-rate').textContent = screeningRate + '%';
+    }
+
+    // Update case statistics
+    updateStat('positive-cases', stats.case_stats?.positive_cases);
+    updateStat('negative-cases', stats.case_stats?.negative_cases);
+
+    // Update appointment and follow-up statistics
+    updateStat('todays-appointments', stats.appointment_stats?.today);
+    updateStat('follow-ups-pending', stats.follow_up_stats?.pending);
+    updateStat('pending-followups', stats.follow_up_stats?.pending);
+    updateStat('overdue-followups', stats.follow_up_stats?.overdue);
+
+    // Calculate completed follow-ups
+    const completedFollowups = (stats.follow_up_stats?.pending || 0) - (stats.follow_up_stats?.overdue || 0);
+    updateStat('completed-followups', completedFollowups);
+
+    // Update detection rate
+    updateStat('detection-rate', stats.monthly_detection_rate);
+
+    // Initialize charts
+    initializeCharts(stats);
+
+  } catch (error) {
+    console.error('Failed to load dashboard stats:', error);
+    document.getElementById('dashboard-error-alert').classList.remove('hidden');
+    const errorText = document.getElementById('dashboard-error-alert').querySelector('.error-message');
+    if (errorText) {
+      errorText.textContent = 'Failed to load dashboard statistics: ' + error.message;
+    }
+  }
+}
+
+function updateStat(elementId, value) {
+  const element = document.getElementById(elementId);
+  if (element && value !== null && value !== undefined) {
+    element.textContent = value;
+  }
+}
+
+function initializeCharts(stats) {
+  // Destroy existing charts before creating new ones
+  const existingCharts = Chart.instances;
+  for (let i = existingCharts.length - 1; i >= 0; i--) {
+    existingCharts[i].destroy();
+  }
+
+  // Stage Distribution Chart
+  const stageCtx = document.getElementById('stageDistributionChart')?.getContext('2d');
+  if (stageCtx) {
+    new Chart(stageCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Normal', 'LSIL', 'HSIL', 'Carcinoma'],
+        datasets: [{
+          label: 'Cases',
+          data: [
+            stats.stage_distribution?.[0] || 0,
+            stats.stage_distribution?.[1] || 0,
+            stats.stage_distribution?.[2] || 0,
+            (stats.stage_distribution?.[3] || 0) + (stats.stage_distribution?.[4] || 0)
+          ],
+          backgroundColor: [
+            'rgba(34, 197, 94, 0.8)',
+            'rgba(234, 179, 8, 0.8)',
+            'rgba(249, 115, 22, 0.8)',
+            'rgba(239, 68, 68, 0.8)'
+          ],
+          borderRadius: 8,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0 },
+            grid: { color: '#f1f5f9' }
+          },
+          x: {
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  // Follow-up Chart
+  const followUpCtx = document.getElementById('followUpChart')?.getContext('2d');
+  if (followUpCtx) {
+    new Chart(followUpCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Pending', 'Overdue', 'Completed'],
+        datasets: [{
+          data: [
+            stats.follow_up_stats?.pending || 0,
+            stats.follow_up_stats?.overdue || 0,
+            ((stats.follow_up_stats?.pending || 0) - (stats.follow_up_stats?.overdue || 0))
+          ],
+          backgroundColor: ['#eab308', '#ef4444', '#22c55e'],
+          borderWidth: 0,
+          spacing: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              usePointStyle: true,
+              padding: 15,
+              font: { size: 11 }
+            }
+          }
+        },
+        cutout: '70%'
+      }
+    });
+  }
+
+  // Detection Rate Chart (simple version for current month)
+  const detectionCtx = document.getElementById('detectionRateChart')?.getContext('2d');
+  if (detectionCtx) {
+    const currentMonth = new Date().toLocaleDateString('en-US', { month: 'short' });
+    new Chart(detectionCtx, {
+      type: 'line',
+      data: {
+        labels: [currentMonth],
+        datasets: [{
+          label: 'Detection Rate',
+          data: [stats.monthly_detection_rate || 0],
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#6366f1',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 2,
+          pointRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: function(value) { return value + '%'; }
+            },
+            grid: { color: '#f1f5f9' }
+          },
+          x: {
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+}
+
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', () => {
+  updateTime();
+  setInterval(updateTime, 60000);
+  loadDashboardStats();
+});
+</script>
 {% endblock %}

@@ -3,6 +3,62 @@
 {% block title %}{{ patient.full_name }} - Patient Profile{% endblock %}
 
 {% block content %}
+<!-- Toast Notification Container -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+<script>
+// Toast notification system
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+    };
+
+    const icons = {
+        success: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>',
+        error: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',
+        warning: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
+        info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+    };
+
+    toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 min-w-[300px] max-w-md transform transition-all duration-300 translate-x-full opacity-0`;
+    toast.innerHTML = `
+        <div class="flex-shrink-0">${icons[type]}</div>
+        <div class="flex-1">${message}</div>
+        <button onclick="this.parentElement.remove()" class="flex-shrink-0 text-white hover:text-gray-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-x-full', 'opacity-0');
+    });
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+// Show Django messages as toasts on page load
+document.addEventListener('DOMContentLoaded', function() {
+    {% if messages %}
+        {% for message in messages %}
+            showToast('{{ message }}', '{{ message.tags }}');
+        {% endfor %}
+    {% endif %}
+});
+</script>
+
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow">
@@ -41,11 +97,16 @@
         <!-- Patient Info Card -->
         <div class="bg-white shadow rounded-lg mb-8">
             <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Patient Information</h3>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                    Patient Information
+                </h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Full Name</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.full_name }}</dd>
+                        <dd class="mt-1 text-sm font-medium text-gray-900">{{ patient.full_name }}</dd>
                     </div>
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Patient ID</dt>
@@ -66,9 +127,118 @@
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.phone|default:"—" }}</dd>
                     </div>
                     <div>
+                        <dt class="text-sm font-medium text-gray-500">Alternate Contact</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.alternate_contact|default:"—" }}</dd>
+                    </div>
+                    <div>
                         <dt class="text-sm font-medium text-gray-500">Email</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.email|default:"—" }}</dd>
                     </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Date of Birth</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.date_of_birth|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Marital Status</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.get_marital_status_display|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Occupation</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.occupation|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Education</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.get_education_level_display|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Blood Group</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.blood_group|default:"—" }}</dd>
+                    </div>
+                    <div class="sm:col-span-2 lg:col-span-4">
+                        <dt class="text-sm font-medium text-gray-500">Address</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.address|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Location & Identification Card -->
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Location & Identification
+                </h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">District</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.district|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">State</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.state|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">PIN Code</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.pin_code|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Aadhaar Number</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.aadhaar_number|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">ABHA Health ID</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.abha_health_id|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Medical Record No.</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.medical_record_number|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Emergency Contact Card -->
+        {% if patient.emergency_contact_name or patient.emergency_contact_number %}
+        <div class="bg-white shadow rounded-lg mb-8 border-l-4 border-red-500">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    Emergency Contact
+                </h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Contact Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.emergency_contact_name|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Relationship</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.emergency_contact_relationship|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Contact Number</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.emergency_contact_number|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Medical Information Card -->
+        <div class="bg-white shadow rounded-lg mb-8">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                    </svg>
+                    Medical Information
+                </h3>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                         <dt class="text-sm font-medium text-gray-500">HPV Status</dt>
                         <dd class="mt-1 text-sm">
@@ -86,51 +256,96 @@
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.last_screening_date|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Registered</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.created_at|date:"F d, Y" }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Pregnancy Status</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ patient.get_pregnancy_status_display|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Current FIGO Stage</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if patient.current_figo_stage %}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                                    Stage {{ patient.current_figo_stage }}
+                                </span>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
                     </div>
                     <div class="sm:col-span-2 lg:col-span-3">
-                        <dt class="text-sm font-medium text-gray-500">Address</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.address|default:"—" }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Consent Status</dt>
+                        <dd class="mt-1 flex items-center space-x-6">
+                            <span class="inline-flex items-center">
+                                {% if patient.consent_screening %}
+                                    <svg class="h-5 w-5 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span class="text-sm text-gray-700">Screening</span>
+                                {% else %}
+                                    <svg class="h-5 w-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    <span class="text-sm text-gray-400">Screening</span>
+                                {% endif %}
+                            </span>
+                            <span class="inline-flex items-center">
+                                {% if patient.consent_image_capture %}
+                                    <svg class="h-5 w-5 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span class="text-sm text-gray-700">Image Capture</span>
+                                {% else %}
+                                    <svg class="h-5 w-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    <span class="text-sm text-gray-400">Image Capture</span>
+                                {% endif %}
+                            </span>
+                            <span class="inline-flex items-center">
+                                {% if patient.consent_ai_analysis %}
+                                    <svg class="h-5 w-5 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    <span class="text-sm text-gray-700">AI Analysis</span>
+                                {% else %}
+                                    <svg class="h-5 w-5 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    <span class="text-sm text-gray-400">AI Analysis</span>
+                                {% endif %}
+                            </span>
+                        </dd>
                     </div>
                 </dl>
             </div>
         </div>
 
         <!-- Medical History Card -->
-        {% if patient.medical_history or patient.medications or patient.allergies or patient.family_history %}
+        {% if patient.medical_history or patient.medications or patient.allergies or patient.family_history or patient.notes %}
         <div class="bg-white shadow rounded-lg mb-8">
             <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Medical History</h3>
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    Medical History
+                </h3>
                 <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                     {% if patient.medical_history %}
                     <div class="sm:col-span-2">
                         <dt class="text-sm font-medium text-gray-500">Medical History</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.medical_history }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.medical_history }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.medications %}
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Current Medications</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.medications }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.medications }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.allergies %}
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Allergies</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.allergies }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900 bg-red-50 p-3 rounded border border-red-100">{{ patient.allergies }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.family_history %}
                     <div class="sm:col-span-2">
                         <dt class="text-sm font-medium text-gray-500">Family History</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.family_history }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.family_history }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.notes %}
                     <div class="sm:col-span-2">
                         <dt class="text-sm font-medium text-gray-500">Additional Notes</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.notes }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900 bg-yellow-50 p-3 rounded border border-yellow-100">{{ patient.notes }}</dd>
                     </div>
                     {% endif %}
                 </dl>
@@ -245,7 +460,8 @@
             </button>
         </div>
 
-        <form id="editPatientForm" class="space-y-6">
+        <form id="editPatientForm" method="post" action="/patient/{{ patient.patient_id }}" class="space-y-6">
+            {% csrf_token %}
             <!-- Basic Information -->
             <div>
                 <h4 class="text-sm font-medium text-gray-900 mb-3">Basic Information</h4>
@@ -367,29 +583,7 @@ function hideEditModal() {
     document.body.style.overflow = 'auto';
 }
 
-document.getElementById('editPatientForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData.entries());
-    const patientId = '{{ patient.patient_id }}';
-
-    try {
-        const response = await fetch(`/api/v1/patients/${patientId}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-            hideEditModal();
-            location.reload();
-        } else {
-            const result = await response.json();
-            alert('Failed to update patient: ' + (result.error || 'Unknown error'));
-        }
-    } catch (error) {
-        alert('Error updating patient');
-    }
-});
+// Form now submits normally to Django view - no JS interception needed
+// The modal will be hidden and page will reload after successful submission
 </script>
 {% endblock %}

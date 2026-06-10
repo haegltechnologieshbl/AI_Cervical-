@@ -214,6 +214,7 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
         const resp = await fetch('/api/v1/auth/user/{{ request.user.id }}', {
             method: 'PUT',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            credentials: 'same-origin',
             body: JSON.stringify({full_name: fullName})
         });
         const data = await resp.json();

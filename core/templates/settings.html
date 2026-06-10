@@ -369,6 +369,7 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
         const response = await fetch('/api/v1/auth/change-password', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({
                 old_password: currentPassword,
                 new_password: newPassword

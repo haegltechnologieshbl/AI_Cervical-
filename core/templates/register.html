@@ -58,6 +58,26 @@
                         placeholder="••••••••">
                 </div>
 
+                <div>
+                    <label for="license_number" class="block text-sm font-medium text-gray-700">Doctor Registration Number</label>
+                    <input id="license_number" name="license_number" type="text" required
+                        class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                        placeholder="e.g., GMC-123456 or NMC-789012">
+                </div>
+
+                <div>
+                    <label for="department" class="block text-sm font-medium text-gray-700">Department / Role</label>
+                    <select id="department" name="department" required
+                        class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm">
+                        <option value="">Select your specialty</option>
+                        <option value="Gynecologist">Gynecologist</option>
+                        <option value="Oncologist">Oncologist</option>
+                        <option value="Pathologist">Pathologist</option>
+                        <option value="General Practitioner">General Practitioner</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
             </div>
 
             <div>
@@ -138,7 +158,9 @@ registerForm.addEventListener('submit', async (e) => {
         full_name: formData.get('full_name'),
         username: formData.get('username'),
         email: formData.get('email'),
-        password: password
+        password: password,
+        license_number: formData.get('license_number'),
+        department: formData.get('department')
     };
 
     registerBtn.disabled = true;

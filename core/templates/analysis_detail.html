@@ -325,6 +325,7 @@ async function downloadReport() {
         const response = await fetch('/api/v1/reports/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({ analysis_id: analysisId })
         });
         if (response.ok) {

@@ -4,161 +4,265 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Admin - CerviStage AI{% endblock %}</title>
+  <title>{% block title %}Admin Panel - CerviStage AI{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+
     /* Custom scrollbar */
     ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #f1f1f1;
+      background: #f1f5f9;
     }
     ::-webkit-scrollbar-thumb {
-      background: #888;
-      border-radius: 4px;
+      background: #cbd5e1;
+      border-radius: 3px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #555;
+      background: #94a3b8;
+    }
+
+    /* Sidebar animations */
+    .nav-item {
+      transition: all 0.2s ease;
+    }
+    .nav-item:hover {
+      transform: translateX(4px);
+    }
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0) 100%);
+      border-left: 3px solid #6366f1;
+    }
+
+    /* Card hover effects */
+    .stat-card {
+      transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Gradient backgrounds */
+    .gradient-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .gradient-success {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    .gradient-info {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    .gradient-warning {
+      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    /* Loading animation */
+    .loading-spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #6366f1;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Pulse animation for notifications */
+    .pulse-dot {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-gray-50">
+<body class="bg-slate-50">
 
   <div class="flex h-screen overflow-hidden">
-    <!-- Sidebar -->
-    <aside class="w-64 bg-slate-900 text-white flex-shrink-0 hidden md:flex flex-col">
-      <!-- Logo -->
-      <div class="p-6 border-b border-slate-700">
+    <!-- Enhanced Sidebar -->
+    <aside class="w-72 bg-gradient-to-b from-slate-900 to-slate-800 text-white flex-shrink-0 flex flex-col shadow-2xl">
+      <!-- Logo Section -->
+      <div class="p-6 border-b border-slate-700/50">
         <div class="flex items-center space-x-3">
-          <div class="bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl p-2">
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-3 shadow-lg">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
           </div>
           <div>
-            <h1 class="font-bold text-lg">CerviStage AI</h1>
-            <p class="text-xs text-slate-400">Admin Panel</p>
+            <h1 class="font-bold text-xl">CerviStage AI</h1>
+            <p class="text-xs text-slate-400">Hospital Management System</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="p-4 border-b border-slate-700/50">
+        <div class="bg-slate-800/50 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-semibold text-slate-400 uppercase">System Status</span>
+            <span class="flex items-center text-green-400 text-xs">
+              <span class="w-2 h-2 bg-green-400 rounded-full mr-2 pulse-dot"></span>
+              Online
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="text-center">
+              <div class="text-2xl font-bold text-white" id="quick-patients">-</div>
+              <div class="text-xs text-slate-400">Patients</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-white" id="quick-analyses">-</div>
+              <div class="text-xs text-slate-400">Analyses</div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Navigation -->
-      <nav class="flex-1 overflow-y-auto py-4">
-        <div class="px-3 space-y-1">
-          <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Main</p>
+      <nav class="flex-1 overflow-y-auto py-4 px-3">
+        <div class="space-y-6">
+          <!-- Dashboard Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Main Menu</p>
+            <a href="{% url 'admin-dashboard' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-white {% if request.resolver_match.url_name == 'admin-dashboard' %}active{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-tachometer-alt w-5 text-center mr-3"></i>
+              Dashboard
+            </a>
+          </div>
 
-          <a href="{% url 'admin-dashboard' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-dashboard' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-            </svg>
-            Dashboard
-          </a>
+          <!-- Data Analysis Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Analysis</p>
+            <a href="{% url 'admin-test-results' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-test-results' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-chart-bar w-5 text-center mr-3"></i>
+              All Data Analysis
+            </a>
+            <a href="{% url 'admin-test-history' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-test-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-history w-5 text-center mr-3"></i>
+              History
+            </a>
+          </div>
 
-          {% if request.user.is_authenticated and request.user.profile.role == 'admin' %}
-          <a href="{% url 'admin-users' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-users' or request.resolver_match.url_name == 'admin-user-history' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-            </svg>
-            Users List
-          </a>
+          <!-- Doctors Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Doctors</p>
+            <a href="{% url 'admin-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-users' or request.resolver_match.url_name == 'admin-user-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-user-md w-5 text-center mr-3"></i>
+              Doctors List
+            </a>
+            <a href="{% url 'admin-registered-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-registered-users' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-user-plus w-5 text-center mr-3"></i>
+              Registered Patients
+              {% if new_users_count > 0 %}
+              <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ new_users_count }}</span>
+              {% endif %}
+            </a>
+          </div>
 
-          <a href="{% url 'admin-registered-users' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-registered-users' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1a6 6 0 01-6 0v-1z"/>
-            </svg>
-            Registered Users
-          </a>
+          <!-- Patients Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patients</p>
+            <a href="{% url 'admin-patients' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-patients' or request.resolver_match.url_name == 'admin-patient-profile' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-hospital-user w-5 text-center mr-3"></i>
+              All Patient Lists
+            </a>
+          </div>
 
-          <a href="{% url 'admin-patients' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-patients' or request.resolver_match.url_name == 'admin-patient-profile' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-            </svg>
-            All Patients
-          </a>
-          {% endif %}
+          <!-- Results Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Results</p>
+            <a href="{% url 'admin-test-results' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-test-results' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-vial w-5 text-center mr-3"></i>
+              Doctor Tested Results
+            </a>
+          </div>
 
-          <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">Tests & Results</p>
-
-          <a href="{% url 'admin-test-results' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-test-results' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            User Test Results
-          </a>
-
-          <a href="{% url 'admin-test-history' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md {% if request.resolver_match.url_name == 'admin-test-history' %}bg-slate-800 text-white{% else %}text-slate-300 hover:bg-slate-800 hover:text-white{% endif %}">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            User Test History
-          </a>
-
-          <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">System</p>
-
-          <a href="{% url 'settings-page' %}" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-800 hover:text-white">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            Settings
-          </a>
-
-          <a href="/django-admin/" target="_blank" class="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-800 hover:text-white">
-            <svg class="mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            Django Admin
-          </a>
+          <!-- System Section -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">System</p>
+            <button onclick="logout()" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg w-full text-left text-red-400 hover:bg-red-900/20 hover:text-red-300">
+              <i class="fas fa-sign-out-alt w-5 text-center mr-3"></i>
+              Logout
+            </button>
+          </div>
         </div>
       </nav>
 
-      <!-- User Section -->
-      <div class="p-4 border-t border-slate-700">
+      <!-- User Profile Section -->
+      <div class="p-4 border-t border-slate-700/50">
         <div class="flex items-center">
-          <div class="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center">
-            <span class="text-white font-medium">{{ request.user.username|first|upper }}</span>
+          <div class="relative">
+            <div class="h-12 w-12 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full flex items-center justify-center">
+              <span class="text-white font-bold text-lg">{{ request.user.username|first|upper }}</span>
+            </div>
+            <div class="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-slate-800"></div>
           </div>
-          <div class="ml-3 flex-1">
-            <p class="text-sm font-medium text-white">{{ request.user.get_full_name|default:request.user.username }}</p>
-            <p class="text-xs text-slate-400">{{ request.user.profile.role|title }}</p>
+          <div class="ml-3 flex-1 min-w-0">
+            <p class="text-sm font-semibold text-white truncate">{{ request.user.get_full_name|default:request.user.username }}</p>
+            <p class="text-xs text-slate-400 truncate">{{ request.user.email|default:'No email' }}</p>
+            <p class="text-xs text-indigo-400 mt-0.5">{{ request.user.profile.role|title }}</p>
           </div>
         </div>
-        <button onclick="logout()" class="mt-3 w-full flex items-center justify-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-800 hover:text-white">
-          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-          </svg>
-          Logout
-        </button>
       </div>
     </aside>
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <!-- Top Header -->
-      <header class="bg-white shadow-sm z-10">
+      <header class="bg-white shadow-sm border-b border-slate-200">
         <div class="px-6 py-4">
           <div class="flex items-center justify-between">
-            <!-- Mobile menu button -->
-            <button type="button" class="md:hidden text-gray-400 hover:text-gray-500">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-              </svg>
-            </button>
+            <!-- Left side - Breadcrumb & Title -->
+            <div class="flex items-center space-x-4">
+              <!-- Mobile menu button -->
+              <button type="button" class="lg:hidden text-slate-400 hover:text-slate-600">
+                <i class="fas fa-bars text-xl"></i>
+              </button>
 
-            <!-- Breadcrumb -->
-            <div class="hidden md:flex items-center space-x-2 text-sm">
-              <span class="text-gray-400">Admin</span>
-              <span class="text-gray-300">/</span>
-              {% block breadcrumb %}<span class="text-gray-600">Dashboard</span>{% endblock %}
+              <div class="hidden md:block">
+                <nav class="flex items-center space-x-2 text-sm">
+                  <a href="{% url 'admin-dashboard' %}" class="text-slate-500 hover:text-slate-700">Admin</a>
+                  <i class="fas fa-chevron-right text-slate-400 text-xs"></i>
+                  {% block breadcrumb %}<span class="text-slate-800 font-medium">Dashboard</span>{% endblock %}
+                </nav>
+              </div>
             </div>
 
-            <!-- Right side -->
+            <!-- Right side - Actions -->
             <div class="flex items-center space-x-4">
-              <span class="hidden sm:inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold">
+              <!-- Quick Actions Dropdown -->
+              <div class="relative">
+                <button class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                  <i class="fas fa-plus"></i>
+                  <span class="hidden sm:inline">Quick Action</span>
+                  <i class="fas fa-chevron-down text-xs"></i>
+                </button>
+              </div>
+
+              <!-- Notifications -->
+              <button class="relative p-2 text-slate-400 hover:text-slate-600">
+                <i class="fas fa-bell text-xl"></i>
+                <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+              </button>
+
+              <!-- Research Use Badge -->
+              <span class="hidden sm:inline-flex items-center px-3 py-1.5 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold border border-amber-200">
+                <i class="fas fa-flask mr-1.5"></i>
                 Research Use Only
               </span>
             </div>
@@ -167,12 +271,21 @@
       </header>
 
       <!-- Main Content Area -->
-      <main class="flex-1 overflow-y-auto">
+      <main class="flex-1 overflow-y-auto p-6">
         {% block content %}{% endblock %}
       </main>
+
+      <!-- Footer -->
+      <footer class="bg-white border-t border-slate-200 px-6 py-4">
+        <div class="flex items-center justify-between text-sm text-slate-500">
+          <p>© 2024 CerviStage AI. All rights reserved.</p>
+          <p class="hidden sm:block">Version 2.0.1 | <span class="text-green-600">System Operational</span></p>
+        </div>
+      </footer>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
   // Function to get CSRF token from cookies
   function getCookie(name) {
@@ -193,7 +306,6 @@
   async function logout() {
     if (confirm('Are you sure you want to logout?')) {
       try {
-        // Call logout API to clear session and blacklist token
         const refreshToken = localStorage.getItem('refresh_token');
         if (refreshToken) {
           await fetch('/api/v1/auth/logout', {
@@ -202,22 +314,35 @@
               'Content-Type': 'application/json',
               'X-CSRFToken': getCookie('csrftoken')
             },
-            body: JSON.stringify({
-              refresh: refreshToken
-            })
+            body: JSON.stringify({ refresh: refreshToken })
           });
         }
       } catch (error) {
         console.log('Logout API call failed, but continuing...');
       }
-
-      // Clear local storage
       localStorage.clear();
-
-      // Redirect to login
       window.location.href = '/login/';
     }
   }
+
+  // Load quick stats
+  async function loadQuickStats() {
+    try {
+      const response = await fetch('/api/v1/dashboard/hospital-stats');
+      if (response.ok) {
+        const stats = await response.json();
+        document.getElementById('quick-patients').textContent = stats.patient_stats?.total_registered || '0';
+        document.getElementById('quick-analyses').textContent = stats.case_stats?.positive_cases + stats.case_stats?.negative_cases || '0';
+      }
+    } catch (error) {
+      console.log('Failed to load quick stats');
+    }
+  }
+
+  // Initialize
+  document.addEventListener('DOMContentLoaded', () => {
+    loadQuickStats();
+  });
   </script>
 
   {% block scripts %}{% endblock %}
