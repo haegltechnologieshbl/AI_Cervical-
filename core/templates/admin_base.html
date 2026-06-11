@@ -7,6 +7,31 @@
   <title>{% block title %}Admin Panel - CerviStage AI{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Healthcare-Optimized Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            medical: {
+              500: "#10b981",
+              600: "#059669"
+            },
+            clinical: {
+              500: "#3b82f6",
+              600: "#2563eb"
+            },
+            diagnostic: {
+              500: "#f59e0b"
+            },
+            critical: {
+              500: "#dc2626"
+            }
+          }
+        }
+      }
+    }
+  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -243,29 +268,7 @@
               </div>
             </div>
 
-            <!-- Right side - Actions -->
-            <div class="flex items-center space-x-4">
-              <!-- Quick Actions Dropdown -->
-              <div class="relative">
-                <button class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-                  <i class="fas fa-plus"></i>
-                  <span class="hidden sm:inline">Quick Action</span>
-                  <i class="fas fa-chevron-down text-xs"></i>
-                </button>
-              </div>
-
-              <!-- Notifications -->
-              <button class="relative p-2 text-slate-400 hover:text-slate-600">
-                <i class="fas fa-bell text-xl"></i>
-                <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-              </button>
-
-              <!-- Research Use Badge -->
-              <span class="hidden sm:inline-flex items-center px-3 py-1.5 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold border border-amber-200">
-                <i class="fas fa-flask mr-1.5"></i>
-                Research Use Only
-              </span>
-            </div>
+           
           </div>
         </div>
       </header>
@@ -328,11 +331,22 @@
   // Load quick stats
   async function loadQuickStats() {
     try {
-      const response = await fetch('/api/v1/dashboard/hospital-stats');
+      // Send both session cookie and JWT token (if stored) for authentication
+      const token = localStorage.getItem('access_token');
+      const headers = {
+        'X-CSRFToken': getCookie('csrftoken'),
+      };
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+      const response = await fetch('/api/v1/dashboard/hospital-stats', {
+        credentials: 'include',
+        headers: headers,
+      });
       if (response.ok) {
         const stats = await response.json();
-        document.getElementById('quick-patients').textContent = stats.patient_stats?.total_registered || '0';
-        document.getElementById('quick-analyses').textContent = stats.case_stats?.positive_cases + stats.case_stats?.negative_cases || '0';
+        document.getElementById('quick-patients').textContent = stats.patient_stats?.total_registered ?? '0';
+        document.getElementById('quick-analyses').textContent = stats.case_stats?.total_analyses ?? '0';
       }
     } catch (error) {
       console.log('Failed to load quick stats');

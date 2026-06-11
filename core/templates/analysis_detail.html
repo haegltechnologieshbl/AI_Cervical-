@@ -32,57 +32,6 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        <!-- ───── Medical Disclaimer Banner ───── -->
-        <div class="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-4 mb-6">
-            <div class="flex items-start">
-                <svg class="h-5 w-5 text-amber-400 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-                <div>
-                    <h3 class="text-sm font-semibold text-amber-800">⚠️ AI ASSISTANCE TOOL - NOT FOR DIAGNOSIS</h3>
-                    <p class="text-sm text-amber-700 mt-1">
-                        This AI system is designed to <strong>assist pathologists</strong> by highlighting potentially abnormal cells.
-                        It is <strong>not a diagnostic device</strong>. All findings must be confirmed by a qualified healthcare professional.
-                        Clinical decisions should never be based solely on AI output. False positives and false negatives may occur.
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- ───── Confidence-Specific Warning ───── -->
-        {% if analysis.confidence < 0.60 %}
-        <div class="bg-red-50 border-l-4 border-red-400 rounded-lg p-4 mb-6">
-            <div class="flex items-start">
-                <svg class="h-5 w-5 text-red-400 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                </svg>
-                <div>
-                    <h3 class="text-sm font-semibold text-red-800">⚠️ LOW CONFIDENCE PREDICTION</h3>
-                    <p class="text-sm text-red-700 mt-1">
-                        The AI shows <strong>{{ confidence_pct }}% confidence</strong> in this classification.
-                        This may indicate borderline cellular changes, poor image quality, or unusual presentation.
-                        <strong>Pathologist review is MANDATORY</strong> before any clinical decisions.
-                    </p>
-                </div>
-            </div>
-        </div>
-        {% elif analysis.confidence < 0.80 %}
-        <div class="bg-orange-50 border-l-4 border-orange-400 rounded-lg p-4 mb-6">
-            <div class="flex items-start">
-                <svg class="h-5 w-5 text-orange-400 mt-0.5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-                <div>
-                    <h3 class="text-sm font-semibold text-orange-800">⚠️ MODERATE CONFIDENCE - REVIEW RECOMMENDED</h3>
-                    <p class="text-sm text-orange-700 mt-1">
-                        The AI shows <strong>{{ confidence_pct }}% confidence</strong>. Pathologist review is recommended before clinical decisions,
-                        especially for high-grade findings or abnormal results.
-                    </p>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         <!-- ───── Result Banner with Confidence Level ───── -->
         {% with cls=analysis.predicted_class %}
         <div class="bg-white shadow rounded-2xl mb-8 overflow-hidden">
@@ -135,6 +84,10 @@
                                 {% if analysis.confidence_level == 'High' %}text-green-600
                                 {% elif analysis.confidence_level == 'Moderate' %}text-yellow-600
                                 {% else %}text-red-600{% endif %}">{{ analysis.confidence_level }}</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 text-xs uppercase tracking-wide">Risk Level</span>
+                            <p class="text-lg font-semibold text-gray-900">{{ analysis.confidence_level }}</p>
                         </div>
                         <div>
                             <span class="text-gray-500 text-xs uppercase tracking-wide">Uncertainty</span>
@@ -216,7 +169,42 @@
             </div>
         </div>
 
-        <!-- ───── Clinical Explanation ───── -->
+        <!-- ───── Risk Assessment Card ───── -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <!-- Risk Score -->
+            <div class="bg-white shadow rounded-2xl overflow-hidden">
+                <div class="px-6 py-5 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-100">
+                    <h3 class="text-sm font-semibold text-amber-900 uppercase tracking-wide">Risk Score</h3>
+                </div>
+                <div class="px-6 py-8 flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-amber-100 mb-4">
+                            <span class="text-4xl font-bold text-amber-900">{{ analysis.confidence|floatformat:0 }}*</span>
+                        </div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wide">Confidence Score</p>
+                        <p class="text-sm text-gray-600 mt-2">Scale: 0-100</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Category -->
+            <div class="bg-white shadow rounded-2xl overflow-hidden">
+                <div class="px-6 py-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+                    <h3 class="text-sm font-semibold text-blue-900 uppercase tracking-wide">Risk Assessment</h3>
+                </div>
+                <div class="px-6 py-8 flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="inline-flex items-center px-6 py-3 rounded-full text-lg font-bold mb-4
+                            {% if analysis.confidence_level == 'High' %}bg-green-100 text-green-800
+                            {% elif analysis.confidence_level == 'Moderate' %}bg-yellow-100 text-yellow-800
+                            {% else %}bg-orange-100 text-orange-800{% endif %}">
+                            {{ analysis.confidence_level }} Confidence
+                        </div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wide mt-2">AI Assessment Level</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="bg-white shadow rounded-2xl mb-8">
             <div class="px-5 py-5">
                 <div class="flex items-start gap-4">

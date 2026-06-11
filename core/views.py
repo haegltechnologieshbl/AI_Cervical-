@@ -25,9 +25,7 @@ from .serializers import (
     FollowUpRecordSerializer, TreatmentRecordSerializer, AppointmentSerializer, RiskAssessmentSerializer
 )
 from services.inference import InferenceService
-from services.inference_fast import FastInferenceService
-from services.inference_vps import VPSInferenceService
-from services.inference_ultra import UltraFastInferenceService
+from core.services import ImageValidator
 import cv2
 import numpy as np
 import os
@@ -131,7 +129,7 @@ class DashboardPageView(View):
         # Recent activity - show user's analyses
         recent_activity = Analysis.objects.filter(
             created_by=request.user
-        ).order_by('-created_at')[:10]
+        ).select_related('patient').order_by('-created_at')[:10]
 
         context = {
             'total_analyses': total_analyses,
@@ -221,11 +219,17 @@ class HospitalDashboardStatsView(APIView):
         today = timezone.now().date()
         month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0)
 
-        user_role = request.user.profile.role
-        is_admin = user_role == 'admin'
+        # Safely determine user role (guard against missing profile)
+        try:
+            user_role = request.user.profile.role
+        except Exception:
+            user_role = 'user'
+        
+        is_admin = user_role == 'admin' or request.user.is_superuser
 
-        # Filter patients and analyses based on role
+        # --- Querysets scoped by role ---
         if is_admin:
+            # Admin sees ALL data across ALL users
             patient_queryset = Patient.objects.all()
             analysis_queryset = Analysis.objects.all()
         else:
@@ -234,20 +238,27 @@ class HospitalDashboardStatsView(APIView):
 
         # Patient Statistics
         total_patients_registered = patient_queryset.count()
+
+        # Count patients who have had at least one AI analysis
         total_patients_screened = patient_queryset.filter(
-            last_screening_date__isnull=False
-        ).count()
+            analyses__isnull=False
+        ).distinct().count()
+
+        # High-risk patients: linked to an HSIL or Carcinoma analysis (class 3 or 4)
         high_risk_patients = patient_queryset.filter(
             analyses__predicted_class__gte=3
         ).distinct().count()
+
         recent_visits = patient_queryset.filter(created_at__date=today).count()
 
         # Analysis Statistics
+        total_analyses = analysis_queryset.count()
         positive_cases = analysis_queryset.filter(predicted_class__gte=3).count()
         negative_cases = analysis_queryset.filter(predicted_class__lte=2).count()
         pending_reviews = analysis_queryset.filter(
             recommendation__isnull=True
         ).count()
+        analyses_today = analysis_queryset.filter(created_at__date=today).count()
 
         # Appointment Statistics
         if is_admin:
@@ -303,9 +314,11 @@ class HospitalDashboardStatsView(APIView):
                 'recent_visits': recent_visits,
             },
             'case_stats': {
+                'total_analyses': total_analyses,
                 'positive_cases': positive_cases,
                 'negative_cases': negative_cases,
                 'pending_reviews': pending_reviews,
+                'analyses_today': analyses_today,
             },
             'appointment_stats': {
                 'today': todays_appointments,
@@ -320,7 +333,7 @@ class HospitalDashboardStatsView(APIView):
             },
             'stage_distribution': stage_distribution,
             'monthly_detection_rate': round(monthly_detection_rate, 2),
-            'pending_ai_analysis': 0,  # Can be enhanced if queue system added
+            'pending_ai_analysis': 0,
         })
 
 
@@ -400,6 +413,14 @@ class PatientProfileView(View):
         analyses = Analysis.objects.filter(
             patient=patient
         ).order_by('-created_at')
+
+        # Convert confidence to percentages for display
+        for analysis in analyses:
+            analysis.confidence_pct = round(analysis.confidence * 100, 1)
+            analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
+            # Convert probabilities dict values to percentages
+            if analysis.probabilities:
+                analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
 
         total_analyses = analyses.count()
         if total_analyses > 0:
@@ -519,6 +540,14 @@ class AdminPatientProfileView(View):
         analyses = Analysis.objects.filter(
             patient=patient
         ).order_by('-created_at')
+
+        # Convert confidence to percentages for display
+        for analysis in analyses:
+            analysis.confidence_pct = round(analysis.confidence * 100, 1)
+            analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
+            # Convert probabilities dict values to percentages
+            if analysis.probabilities:
+                analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
 
         total_analyses = analyses.count()
         if total_analyses > 0:
@@ -654,7 +683,7 @@ class LoginView(APIView):
         refresh = RefreshToken.for_user(user)
 
         # Redirect based on user role
-        if user.profile.role == 'admin':
+        if user.is_superuser:
             redirect_url = '/admin/'
         else:
             redirect_url = '/dashboard/'
@@ -1156,8 +1185,10 @@ class AdminDashboardView(View):
             return redirect('/login/?next=/admin/')
 
         user_role = request.user.profile.role
+        is_admin = user_role == 'admin' or request.user.is_superuser
 
-        if user_role == 'admin':
+        if is_admin:
+            user_role = 'admin' # Ensure template sees admin
             total_users = User.objects.count()
             total_analyses = Analysis.objects.count()
 
@@ -1171,7 +1202,7 @@ class AdminDashboardView(View):
             ).order_by('-count')
 
             recent_analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile'
+                'created_by', 'created_by__profile', 'patient'
             ).order_by('-created_at')[:20]
 
             recent_user_registrations = User.objects.select_related('profile').exclude(
@@ -1218,10 +1249,16 @@ class AdminUsersView(View):
 
         # Explicitly filter for users with role='user' and exclude superusers
         # Show only regular users (doctors/staff), no admins or superusers
-        users = User.objects.select_related('profile').filter(
+        users_list = User.objects.select_related('profile').filter(
             profile__role='user',
             is_superuser=False
         ).order_by('-date_joined')
+        
+        from django.core.paginator import Paginator
+        paginator = Paginator(users_list, 25)
+        page_number = request.GET.get('page')
+        users = paginator.get_page(page_number)
+        
         context = {
             'users': users,
         }
@@ -1668,6 +1705,7 @@ class AnalyzeView(APIView):
         analysis_records = []
 
         # Process each uploaded image
+        invalid_images = []
         for idx, image_file in enumerate(files):
             # Validate MIME type
             if image_file.content_type not in allowed_types:
@@ -1675,6 +1713,20 @@ class AnalyzeView(APIView):
                     {"error": f"File {idx+1} ({image_file.name}): Unsupported type {image_file.content_type}. Allowed: JPEG, PNG, BMP, TIFF"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Validate image quality for cytology analysis
+            validation_result = ImageValidator.validate_file(image_file)
+            safe_print(f"[DEBUG] Image {idx+1} validation score: {validation_result['score']}/100")
+
+            if not validation_result["is_valid"]:
+                invalid_images.append({
+                    "index": idx + 1,
+                    "filename": image_file.name,
+                    "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
+                    "score": validation_result["score"]
+                })
+                safe_print(f"[WARN] Image {idx+1} failed validation: {validation_result['errors']}")
+                continue  # Skip this image
 
             try:
                 safe_print(f"[DEBUG] Processing file {idx+1}/{len(files)}: {image_file.name}")
@@ -1712,10 +1764,19 @@ class AnalyzeView(APIView):
             except RuntimeError as e:
                 return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        # Handle case where all images were rejected
+        if len(predictions_list) == 0:
+            return Response({
+                "error": "No valid images could be analyzed",
+                "invalid_images": invalid_images,
+                "message": f"All {len(files)} uploaded images failed quality validation. "
+                          "Please ensure you are uploading valid cervical cytology/cell sample images."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         # Average predictions across all images
         safe_print(f"[DEBUG] Averaging {len(predictions_list)} predictions")
         averaged_prediction = svc.average_predictions(predictions_list)
-        
+
 
         # Generate frames of the results
         frame_urls = []
@@ -1750,7 +1811,8 @@ class AnalyzeView(APIView):
             "confidence_interpretation": averaged_prediction["confidence_interpretation"],
             "recommendation": averaged_prediction["recommendation"],
             "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(files),
+            "images_analyzed": len(predictions_list),
+            "images_total": len(files),
             "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
@@ -1761,6 +1823,22 @@ class AnalyzeView(APIView):
                 "age": patient.age if patient else None,
             } if patient else None,
         }
+
+        # Add validation warnings if any images were rejected
+        if invalid_images:
+            resp["validation_warnings"] = [
+                {
+                    "filename": img["filename"],
+                    "reason": img["reason"],
+                    "score": img["score"]
+                }
+                for img in invalid_images
+            ]
+            resp["validation_warning"] = (
+                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
+                "Results are based on the remaining valid images."
+            )
+            safe_print(f"[WARN] Rejected {len(invalid_images)} invalid images")
 
         return Response(resp, status=status.HTTP_201_CREATED)
 
@@ -1792,7 +1870,7 @@ class FastAnalyzeView(APIView):
         print(f"[FAST] Received {len(files)} files for fast analysis")
 
         allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
-        svc = FastInferenceService.get()
+        svc = InferenceService.get()
 
         if svc.session is None:
             return Response(
@@ -1802,6 +1880,7 @@ class FastAnalyzeView(APIView):
 
         predictions_list = []
         analysis_records = []
+        invalid_images = []
 
         for idx, image_file in enumerate(files):
             if image_file.content_type not in allowed_types:
@@ -1810,10 +1889,25 @@ class FastAnalyzeView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Validate image quality for cytology analysis
+            validation_result = ImageValidator.validate_file(image_file)
+            print(f"[FAST] Image {idx+1} validation score: {validation_result['score']}/100")
+
+            if not validation_result["is_valid"]:
+                invalid_images.append({
+                    "index": idx + 1,
+                    "filename": image_file.name,
+                    "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
+                    "score": validation_result["score"]
+                })
+                print(f"[FAST][WARN] Image {idx+1} failed validation")
+                continue
+
             try:
                 safe_print(f"[FAST] Processing file {idx+1}/{len(files)}: {image_file.name}")
                 prediction = svc.predict(
                     image_file,
+                    mode='fast',
                     skip_heatmap=skip_heatmap
                 )
                 predictions_list.append(prediction)
@@ -1846,6 +1940,16 @@ class FastAnalyzeView(APIView):
                 return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         print(f"[FAST] Averaging {len(predictions_list)} predictions")
+
+        # Handle case where all images were rejected
+        if len(predictions_list) == 0:
+            return Response({
+                "error": "No valid images could be analyzed",
+                "invalid_images": invalid_images,
+                "message": f"All {len(files)} uploaded images failed quality validation. "
+                          "Please ensure you are uploading valid cervical cytology/cell sample images."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         averaged_prediction = svc.average_predictions(predictions_list)
 
         individual_results = []
@@ -1871,7 +1975,8 @@ class FastAnalyzeView(APIView):
             "confidence_interpretation": averaged_prediction["confidence_interpretation"],
             "recommendation": averaged_prediction["recommendation"],
             "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(files),
+            "images_analyzed": len(predictions_list),
+            "images_total": len(files),
             "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
@@ -1881,6 +1986,22 @@ class FastAnalyzeView(APIView):
                 "age": patient.age if patient else None,
             } if patient else None,
         }
+
+        # Add validation warnings if any images were rejected
+        if invalid_images:
+            resp["validation_warnings"] = [
+                {
+                    "filename": img["filename"],
+                    "reason": img["reason"],
+                    "score": img["score"]
+                }
+                for img in invalid_images
+            ]
+            resp["validation_warning"] = (
+                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
+                "Results are based on the remaining valid images."
+            )
+            print(f"[FAST][WARN] Rejected {len(invalid_images)} invalid images")
 
         return Response(resp, status=status.HTTP_201_CREATED)
 
@@ -1910,7 +2031,7 @@ class VPSAnalyzeView(APIView):
         print(f"[ULTRA] Received {len(files)} files (Ultra-fast mode)")
 
         allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
-        svc = UltraFastInferenceService.get()
+        svc = InferenceService.get()
 
         if svc.session is None:
             return Response(
@@ -1920,6 +2041,7 @@ class VPSAnalyzeView(APIView):
 
         predictions_list = []
         analysis_records = []
+        invalid_images = []
 
         for idx, image_file in enumerate(files):
             if image_file.content_type not in allowed_types:
@@ -1928,9 +2050,23 @@ class VPSAnalyzeView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Validate image quality for cytology analysis
+            validation_result = ImageValidator.validate_file(image_file)
+            print(f"[ULTRA] Image {idx+1} validation score: {validation_result['score']}/100")
+
+            if not validation_result["is_valid"]:
+                invalid_images.append({
+                    "index": idx + 1,
+                    "filename": image_file.name,
+                    "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
+                    "score": validation_result["score"]
+                })
+                print(f"[ULTRA][WARN] Image {idx+1} failed validation")
+                continue
+
             try:
                 safe_print(f"[ULTRA] Processing {idx+1}/{len(files)}: {image_file.name} ({image_file.size/1024/1024:.1f} MB)")
-                prediction = svc.predict(image_file, skip_heatmap=True)
+                prediction = svc.predict(image_file, mode='ultra', skip_heatmap=True)
                 predictions_list.append(prediction)
 
                 # Store in database (only use fields that exist in the model)
@@ -1964,12 +2100,22 @@ class VPSAnalyzeView(APIView):
                 return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         print(f"[ULTRA] Averaging {len(predictions_list)} predictions")
+
+        # Handle case where all images were rejected
+        if len(predictions_list) == 0:
+            return Response({
+                "error": "No valid images could be analyzed",
+                "invalid_images": invalid_images,
+                "message": f"All {len(files)} uploaded images failed quality validation. "
+                          "Please ensure you are uploading valid cervical cytology/cell sample images."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         averaged_prediction = svc.average_predictions(predictions_list)
 
         # Generate frames for slideshow (only for <= 30 images to save time)
         frame_urls = []
-        if len(files) <= 30:
-            print(f"[ULTRA] Generating {len(files)} frames for slideshow...")
+        if len(predictions_list) <= 30:
+            print(f"[ULTRA] Generating {len(predictions_list)} frames for slideshow...")
             frame_urls = generate_results_frames(
                 analysis_records,
                 predictions_list
@@ -1985,7 +2131,7 @@ class VPSAnalyzeView(APIView):
                 "image_url": record.image.url if record.image else None,
             })
 
-        return Response({
+        resp = {
             "predicted_class": averaged_prediction["predicted_class"],
             "predicted_label": averaged_prediction["predicted_label"],
             "stage_label": averaged_prediction["stage_label"],
@@ -1998,7 +2144,8 @@ class VPSAnalyzeView(APIView):
             "confidence_interpretation": averaged_prediction["confidence_interpretation"],
             "recommendation": averaged_prediction["recommendation"],
             "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(files),
+            "images_analyzed": len(predictions_list),
+            "images_total": len(files),
             "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
@@ -2008,7 +2155,25 @@ class VPSAnalyzeView(APIView):
                 "full_name": patient.full_name if patient else None,
                 "age": patient.age if patient else None,
             } if patient else None,
-        }, status=status.HTTP_201_CREATED)
+        }
+
+        # Add validation warnings if any images were rejected
+        if invalid_images:
+            resp["validation_warnings"] = [
+                {
+                    "filename": img["filename"],
+                    "reason": img["reason"],
+                    "score": img["score"]
+                }
+                for img in invalid_images
+            ]
+            resp["validation_warning"] = (
+                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
+                "Results are based on the remaining valid images."
+            )
+            print(f"[ULTRA][WARN] Rejected {len(invalid_images)} invalid images")
+
+        return Response(resp, status=status.HTTP_201_CREATED)
 
 
 class HealthView(APIView):

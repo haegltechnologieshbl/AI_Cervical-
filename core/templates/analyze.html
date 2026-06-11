@@ -235,9 +235,313 @@
   let uploadedFileURL = null;
   let uploadedFileURLs = [];
 
-  const MAX_FILES = 500;
+  const MAX_FILES = 25;
   const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
   const REQUEST_TIMEOUT = 1800000; // 30 minutes
+
+  // ─── Image Quality Validator (Frontend) ─────────────────────────────────────────
+  /**
+   * Frontend image quality validation for cervical cytology samples.
+   * Checks basic properties before upload to provide immediate feedback.
+   */
+  const ImageQualityValidator = {
+    // Thresholds matching backend validation
+    MIN_BRIGHTNESS: 40,
+    MAX_BRIGHTNESS: 220,
+    MIN_COLOR_STD: 25,
+    MIN_SATURATION: 20,
+    MIN_WIDTH: 200,
+    MIN_HEIGHT: 200,
+
+    /**
+     * Validate an image file object
+     * @param {File} file - The file to validate
+     * @returns {Promise<Object>} Validation result with is_valid, score, errors, warnings
+     */
+    async validateFile(file) {
+      const result = {
+        is_valid: true,
+        score: 100,
+        errors: [],
+        warnings: [],
+        metrics: {}
+      };
+
+      try {
+        // Load image
+        const img = await this._loadImage(file);
+
+        // Check basic properties
+        this._checkBasicProperties(img, result);
+
+        // If we can access pixel data, perform detailed checks
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          const imageData = ctx.getImageData(0, 0, img.width, img.height);
+          this._checkBrightnessContrast(imageData, result);
+          this._checkColorVariance(imageData, result);
+          this._checkSaturation(imageData, result);
+        } catch (e) {
+          // Cross-origin or other issues - skip detailed checks
+          result.warnings.push('Detailed quality checks unavailable (may be cross-origin image)');
+        }
+
+        // Calculate score
+        result.score = Math.max(0, 100 - (result.warnings.length * 15) - (result.errors.length * 30));
+
+      } catch (e) {
+        result.is_valid = false;
+        result.errors.push(`Failed to validate image: ${e.message}`);
+        result.score = 0;
+      }
+
+      return result;
+    },
+
+    /**
+     * Load image from file
+     */
+    _loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = URL.createObjectURL(file);
+      });
+    },
+
+    /**
+     * Check basic image properties
+     */
+    _checkBasicProperties(img, result) {
+      result.metrics.width = img.width;
+      result.metrics.height = img.height;
+      result.metrics.aspect_ratio = img.width / img.height;
+
+      if (img.width < this.MIN_WIDTH || img.height < this.MIN_HEIGHT) {
+        result.is_valid = false;
+        result.errors.push(`Image too small (${img.width}x${img.height}, minimum ${this.MIN_WIDTH}x${this.MIN_HEIGHT})`);
+      }
+    },
+
+    /**
+     * Check brightness and contrast
+     */
+    _checkBrightnessContrast(imageData, result) {
+      const data = imageData.data;
+      let totalBrightness = 0;
+      let totalSquared = 0;
+      const pixelCount = data.length / 4;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        totalBrightness += brightness;
+        totalSquared += brightness * brightness;
+      }
+
+      const avgBrightness = totalBrightness / pixelCount;
+      const variance = (totalSquared / pixelCount) - (avgBrightness * avgBrightness);
+      const contrast = Math.sqrt(variance);
+
+      result.metrics.brightness = Math.round(avgBrightness);
+      result.metrics.contrast = Math.round(contrast);
+
+      if (avgBrightness < this.MIN_BRIGHTNESS) {
+        result.is_valid = false;
+        result.errors.push(`Image too dark (brightness: ${avgBrightness.toFixed(1)}, minimum: ${this.MIN_BRIGHTNESS})`);
+      } else if (avgBrightness > this.MAX_BRIGHTNESS) {
+        result.is_valid = false;
+        result.errors.push(`Image too bright (brightness: ${avgBrightness.toFixed(1)}, maximum: ${this.MAX_BRIGHTNESS})`);
+      }
+    },
+
+    /**
+     * Check color variance
+     */
+    _checkColorVariance(imageData, result) {
+      const data = imageData.data;
+      const pixelCount = data.length / 4;
+
+      let rSum = 0, gSum = 0, bSum = 0;
+      let rSqSum = 0, gSqSum = 0, bSqSum = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        rSum += data[i];
+        gSum += data[i + 1];
+        bSum += data[i + 2];
+        rSqSum += data[i] * data[i];
+        gSqSum += data[i + 1] * data[i + 1];
+        bSqSum += data[i + 2] * data[i + 2];
+      }
+
+      const rMean = rSum / pixelCount;
+      const gMean = gSum / pixelCount;
+      const bMean = bSum / pixelCount;
+
+      const rVar = (rSqSum / pixelCount) - (rMean * rMean);
+      const gVar = (gSqSum / pixelCount) - (gMean * gMean);
+      const bVar = (bSqSum / pixelCount) - (bMean * bMean);
+
+      const rStd = Math.sqrt(rVar);
+      const gStd = Math.sqrt(gVar);
+      const bStd = Math.sqrt(bVar);
+      const avgColorStd = (rStd + gStd + bStd) / 3;
+
+      result.metrics.color_std = Math.round(avgColorStd);
+      result.metrics.r_std = Math.round(rStd);
+      result.metrics.g_std = Math.round(gStd);
+      result.metrics.b_std = Math.round(bStd);
+
+      if (avgColorStd < this.MIN_COLOR_STD) {
+        result.is_valid = false;
+        result.errors.push(`Low color variance (${avgColorStd.toFixed(1)}, minimum: ${this.MIN_COLOR_STD}). Image may not be a cytology sample.`);
+        result.warnings.push('This may be a solid color, drawing, or document rather than a medical image.');
+      }
+    },
+
+    /**
+     * Check saturation (for stained samples)
+     */
+    _checkSaturation(imageData, result) {
+      const data = imageData.data;
+      const pixelCount = data.length / 4;
+      let totalSaturation = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i] / 255;
+        const g = data[i + 1] / 255;
+        const b = data[i + 2] / 255;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const saturation = max === 0 ? 0 : (max - min) / max;
+
+        totalSaturation += saturation;
+      }
+
+      const avgSaturation = (totalSaturation / pixelCount) * 100;
+      result.metrics.saturation = Math.round(avgSaturation);
+
+      if (avgSaturation < this.MIN_SATURATION) {
+        result.warnings.push(`Low saturation (${avgSaturation.toFixed(1)}%). Cytology samples typically have stained cells.`);
+        if (avgSaturation < 10) {
+          result.is_valid = false;
+          result.errors.push('Very low saturation - image may be grayscale or not a stained sample.');
+        }
+      }
+    },
+
+    /**
+     * Get human-readable validation summary
+     */
+    getSummary(result) {
+      if (result.is_valid) {
+        return `✓ Quality check passed (Score: ${result.score}/100)`;
+      }
+
+      const messages = [];
+      for (const error of result.errors) {
+        messages.push(`❌ ${error}`);
+      }
+      for (const warning of result.warnings) {
+        messages.push(`⚠️ ${warning}`);
+      }
+      return messages.join('\n');
+    }
+  };
+
+  // ─── Validation UI Components ─────────────────────────────────────────────────
+  /**
+   * Display validation warnings in the UI
+   */
+  function showValidationWarnings(files, results) {
+    const form = document.getElementById('analyzeForm');
+    const existingWarning = document.getElementById('validationWarningBanner');
+
+    // Remove existing warning if present
+    if (existingWarning) {
+      existingWarning.remove();
+    }
+
+    const invalidFiles = [];
+    const warnings = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const result = results[i];
+      const file = files[i];
+
+      if (!result.is_valid) {
+        invalidFiles.push({
+          filename: file.name,
+          reason: result.errors[0] || 'Unknown',
+          score: result.score
+        });
+      }
+
+      if (result.warnings.length > 0) {
+        warnings.push({
+          filename: file.name,
+          warnings: result.warnings
+        });
+      }
+    }
+
+    // Show warning banner if there are issues
+    if (invalidFiles.length > 0 || warnings.length > 0) {
+      const banner = document.createElement('div');
+      banner.id = 'validationWarningBanner';
+
+      if (invalidFiles.length > 0) {
+        banner.className = 'p-4 bg-red-50 border border-red-200 rounded-xl mb-4';
+        banner.innerHTML = `
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+            </svg>
+            <div class="flex-1">
+              <p class="font-semibold text-red-800">${invalidFiles.length} image${invalidFiles.length > 1 ? 's were' : ' was'} rejected</p>
+              <p class="text-sm text-red-600 mt-1">These images don't appear to be valid cervical cytology samples and will not be analyzed:</p>
+              <ul class="mt-2 space-y-1 text-sm text-red-700">
+                ${invalidFiles.map(f => `<li>• <strong>${f.filename}</strong>: ${f.reason}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `;
+      } else if (warnings.length > 0) {
+        banner.className = 'p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4';
+        banner.innerHTML = `
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+            </svg>
+            <div class="flex-1">
+              <p class="font-semibold text-amber-800">Image quality warnings</p>
+              <p class="text-sm text-amber-600 mt-1">Some images have quality issues but will still be analyzed:</p>
+              <ul class="mt-2 space-y-1 text-sm text-amber-700">
+                ${warnings.slice(0, 3).map(w => `<li>• <strong>${w.filename}</strong>: ${w.warnings[0]}</li>`).join('')}
+                ${warnings.length > 3 ? `<li>• ... and ${warnings.length - 3} more</li>` : ''}
+              </ul>
+            </div>
+          </div>
+        `;
+      }
+
+      // Insert at the top of the form
+      form.insertBefore(banner, form.firstChild);
+
+      // Auto-remove after 10 seconds
+      setTimeout(() => {
+        if (banner && banner.parentNode) {
+          banner.remove();
+        }
+      }, 10000);
+    }
+  }
 
   // === PATIENT SELECTION ===
   let selectedPatientId = null;
@@ -484,6 +788,50 @@
           return;
       }
 
+      // === IMAGE QUALITY VALIDATION ===
+      // Validate images for cytology sample quality
+      const validationPromises = imageFiles.map(file => ImageQualityValidator.validateFile(file));
+      const validationResults = await Promise.all(validationPromises);
+
+      // Filter out invalid images
+      const validImageFiles = [];
+      const rejectedFiles = [];
+
+      for (let i = 0; i < imageFiles.length; i++) {
+          if (validationResults[i].is_valid) {
+              validImageFiles.push(imageFiles[i]);
+          } else {
+              rejectedFiles.push({
+                  filename: imageFiles[i].name,
+                  reason: validationResults[i].errors[0] || 'Unknown',
+                  score: validationResults[i].score
+              });
+          }
+      }
+
+      // Show validation warnings if any files were rejected or have warnings
+      if (rejectedFiles.length > 0 || validationResults.some(r => r.warnings.length > 0)) {
+          showValidationWarnings(imageFiles, validationResults);
+      }
+
+      // If all files were rejected, show error and return
+      if (validImageFiles.length === 0) {
+          document.getElementById('errorMsg').textContent =
+              'All images failed quality validation. Please ensure you are uploading valid cervical cytology/cell sample images.';
+          document.getElementById('errorMsg').classList.remove('hidden');
+          this.value = '';
+          return;
+      }
+
+      // Use only validated images
+      const finalImageFiles = validImageFiles;
+      console.log(`[VALIDATION] ${validImageFiles.length} of ${imageFiles.length} images passed validation`);
+
+      // Update file input with valid files only
+      const dt = new DataTransfer();
+      finalImageFiles.forEach(file => dt.items.add(file));
+      this.files = dt.files;
+
       // === AUTO COMPRESS IMAGES ===
       // Compress images larger than 500KB to max 1MB
       const compressBtn = document.getElementById('submitBtn');
@@ -492,8 +840,8 @@
       let progressElement = null; // Declare once here
 
       // Calculate original size
-      const originalSize = imageFiles.reduce((sum, f) => sum + f.size, 0);
-      const filesToCompress = imageFiles.filter(f => f.size > 500 * 1024);
+      const originalSize = finalImageFiles.reduce((sum, f) => sum + f.size, 0);
+      const filesToCompress = finalImageFiles.filter(f => f.size > 500 * 1024);
 
       if (filesToCompress.length > 0) {
           // Skip compression if too many files (performance)
@@ -522,8 +870,8 @@
 
       // Compress images SEQUENTIALLY (one at a time) instead of parallel
       const compressedImages = [];
-      for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i];
+      for (let i = 0; i < finalImageFiles.length; i++) {
+          const file = finalImageFiles[i];
 
           // Skip if already small enough (< 500KB)
           if (file.size <= 500 * 1024) {
@@ -541,7 +889,7 @@
           // Update progress
           const progressStatus = document.getElementById('compressionStatus');
           if (progressStatus) {
-              progressStatus.textContent = `Compressing ${i + 1}/${imageFiles.length}...`;
+              progressStatus.textContent = `Compressing ${i + 1}/${finalImageFiles.length}...`;
           }
 
           try {
@@ -593,9 +941,9 @@
       }
 
       // Update imageFiles to use compressed versions
-      const finalImageFiles = Array.from(this.files);
+      const compressedFiles = Array.from(this.files);
 
-      if (finalImageFiles.length === 0) {
+      if (compressedFiles.length === 0) {
           document.getElementById('errorMsg').textContent =
               'No image files found. Please select JPEG, PNG, BMP, or TIFF files.';
           document.getElementById('errorMsg').classList.remove('hidden');
@@ -603,7 +951,7 @@
       }
 
       // Check total upload size
-      const totalSize = finalImageFiles.reduce((sum, f) => sum + f.size, 0);
+      const totalSize = compressedFiles.reduce((sum, f) => sum + f.size, 0);
 
       if (totalSize > MAX_TOTAL_SIZE) {
           alert('Total upload size exceeds 1GB.');
@@ -615,7 +963,7 @@
       const content = document.getElementById('dropContent');
       const fileLabel = document.getElementById('fileLabel');
 
-      uploadedFileURLs = finalImageFiles.map(file =>
+      uploadedFileURLs = compressedFiles.map(file =>
           URL.createObjectURL(file)
       );
 
@@ -632,18 +980,18 @@
       previewContainer.classList.remove('hidden');
       content.classList.add('hidden');
 
-      if (finalImageFiles.length === 1) {
-          fileLabel.textContent = finalImageFiles[0].name;
+      if (compressedFiles.length === 1) {
+          fileLabel.textContent = compressedFiles[0].name;
       } else {
           fileLabel.textContent =
-              `📁 ${finalImageFiles.length} images selected (${(totalSize/1024/1024).toFixed(1)} MB)`;
+              `📁 ${compressedFiles.length} images selected (${(totalSize/1024/1024).toFixed(1)} MB)`;
       }
 
       const btnText = document.getElementById('btnText');
 
       btnText.textContent =
-          finalImageFiles.length > 1
-              ? `Analyze ${finalImageFiles.length} Images`
+          compressedFiles.length > 1
+              ? `Analyze ${compressedFiles.length} Images`
               : 'Run AI Analysis';
 
       document.getElementById('errorMsg').classList.add('hidden');

@@ -166,25 +166,7 @@
             </div>
 
             <!-- Pagination -->
-            {% if analyses.has_other_pages %}
-            <div class="mt-4 flex items-center justify-between">
-                <div class="text-sm text-gray-500">
-                    Showing page {{ analyses.number }} of {{ analyses.paginator.num_pages }}
-                </div>
-                <div class="flex space-x-2">
-                    {% if analyses.has_previous %}
-                    <a href="?page={{ analyses.previous_page_number }}" class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Previous
-                    </a>
-                    {% endif %}
-                    {% if analyses.has_next %}
-                    <a href="?page={{ analyses.next_page_number }}" class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Next
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
+            {% include 'includes/pagination.html' with page_obj=analyses %}
         </div>
     </div>
 </div>
