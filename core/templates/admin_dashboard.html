@@ -11,9 +11,17 @@
       <h1 class="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
       <p class="text-sm text-slate-500 mt-1">Welcome back, {{ request.user.get_full_name|default:request.user.username }}! Here's what's happening today.</p>
     </div>
-    <div class="text-right">
-      <p class="text-sm text-slate-500">Last updated</p>
-      <p class="text-lg font-semibold text-slate-900" id="current-time">-</p>
+    <div class="flex items-center space-x-4">
+      <div class="text-right">
+        <p class="text-sm text-slate-500">Last updated</p>
+        <p class="text-lg font-semibold text-slate-900" id="current-time">-</p>
+      </div>
+      <a href="{% url 'add-patient' %}" class="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        </svg>
+        Add Patient
+      </a>
     </div>
   </div>
 </div>
@@ -101,16 +109,16 @@
     <div class="p-6">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm font-medium text-slate-600">Detection Rate</p>
-          <p class="text-3xl font-bold text-slate-900 mt-2"><span id="detection-rate">-</span>%</p>
-          <p class="text-xs text-slate-500 mt-1">This month</p>
+          <p class="text-sm font-medium text-slate-600">Patient Registrations</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2"><span id="registrations-today">-</span></p>
+          <p class="text-xs text-slate-500 mt-1">New patients today</p>
         </div>
         <div class="h-14 w-14 bg-purple-100 rounded-xl flex items-center justify-center">
-          <i class="fas fa-chart-pie text-2xl text-purple-600"></i>
+          <i class="fas fa-chart-bar text-2xl text-purple-600"></i>
         </div>
       </div>
       <div class="mt-4 flex items-center text-sm">
-        <span class="text-purple-600 font-medium">Total AI scans: <span id="total-analyses-count">-</span></span>
+        <span class="text-purple-600 font-medium">Last 7 days: <span id="registrations-week">-</span></span>
       </div>
     </div>
   </div>
@@ -199,22 +207,18 @@
     </div>
   </div>
 
-  <!-- Detection Rate Trend -->
+  <!-- Patient Registrations Chart -->
   <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
     <div class="p-6 border-b border-slate-200">
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-lg font-semibold text-slate-900">Detection Rate</h3>
-          <p class="text-sm text-slate-500 mt-1">Current month's positive detection rate</p>
+          <h3 class="text-lg font-semibold text-slate-900">Patient Registrations</h3>
+          <p class="text-sm text-slate-500 mt-1">Daily patient registrations (Last 30 days)</p>
         </div>
-        <select class="text-sm border border-slate-300 rounded-lg px-3 py-1.5">
-          <option>Last 6 months</option>
-          <option>Last 12 months</option>
-        </select>
       </div>
     </div>
     <div class="p-6">
-      <canvas id="detectionRateChart" height="250"></canvas>
+      <canvas id="registrationsChart" height="250"></canvas>
     </div>
   </div>
 </div>
@@ -232,6 +236,105 @@
       </a>
     </div>
   </div>
+  <!-- Recent Patients (admin only) -->
+{% if user_role == 'admin' and recent_patients %}
+<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+  <div class="p-6 border-b border-slate-200">
+    <div class="flex items-center justify-between">
+      <div>
+        <h3 class="text-lg font-semibold text-slate-900">Registered Patients</h3>
+        <p class="text-sm text-slate-500 mt-1">Recent patient registrations in the system</p>
+      </div>
+      <a href="{% url 'admin-patients' %}" class="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1">
+        View All Patients <i class="fas fa-arrow-right text-xs"></i>
+      </a>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-slate-50 border-b border-slate-200">
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patient</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Age</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Gender</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">HPV Status</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Registered By</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+          <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for patient in recent_patients %}
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center gap-2">
+              <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">
+                {{ patient.first_name|first|upper }}
+              </div>
+              <div>
+                <div class="text-slate-900 font-medium">{{ patient.full_name }}</div>
+                <div class="text-slate-400 text-xs font-mono">{{ patient.patient_id|truncatechars:8 }}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-slate-600">
+            {{ patient.age|default:patient.age_calculated|default:"—" }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-slate-600">
+            {{ patient.get_gender_display }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {% if patient.hpv_status == 'positive' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5"></span>Positive
+              </span>
+            {% elif patient.hpv_status == 'negative' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5"></span>Negative
+              </span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                Unknown
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {% if patient.created_by %}
+              <div class="text-slate-600 text-sm">{{ patient.created_by.get_full_name|default:patient.created_by.username }}</div>
+            {% else %}
+              <span class="text-slate-400 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-slate-500">
+            {{ patient.created_at|date:"d M Y" }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center space-x-3">
+              <a href="{% url 'admin-patient-profile' patient.patient_id %}" class="text-indigo-600 hover:text-indigo-800" title="View">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+              </a>
+              <a href="{% url 'edit-patient' patient.patient_id %}" class="text-blue-600 hover:text-blue-800" title="Edit">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+              </a>
+              <button onclick="deletePatient('{{ patient.patient_id }}', '{{ patient.full_name }}')" class="text-red-600 hover:text-red-800" title="Delete">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
   {% if recent_analyses %}
   <div class="overflow-x-auto">
@@ -402,6 +505,8 @@
 </div>
 {% endif %}
 
+
+
 {% endblock %}
 
 {% block scripts %}
@@ -470,8 +575,9 @@ async function loadDashboardStats() {
     const completedFollowups = (stats.follow_up_stats?.pending || 0) - (stats.follow_up_stats?.overdue || 0);
     updateStat('completed-followups', completedFollowups);
 
-    // Update detection rate
-    updateStat('detection-rate', stats.monthly_detection_rate);
+    // Update registration stats
+    updateStat('registrations-today', stats.patient_stats?.recent_visits);
+    updateStat('registrations-week', stats.patient_stats?.registrations_week);
 
     // Initialize charts
     initializeCharts(stats);
@@ -581,25 +687,24 @@ function initializeCharts(stats) {
     });
   }
 
-  // Detection Rate Chart (simple version for current month)
-  const detectionCtx = document.getElementById('detectionRateChart')?.getContext('2d');
-  if (detectionCtx) {
-    const currentMonth = new Date().toLocaleDateString('en-US', { month: 'short' });
-    new Chart(detectionCtx, {
-      type: 'line',
+  // Patient Registrations Chart (bar chart for last 30 days)
+  const registrationsCtx = document.getElementById('registrationsChart')?.getContext('2d');
+  if (registrationsCtx) {
+    const registrationData = stats.registrations_by_day || {};
+    const labels = Object.keys(registrationData);
+    const data = Object.values(registrationData);
+
+    new Chart(registrationsCtx, {
+      type: 'bar',
       data: {
-        labels: [currentMonth],
+        labels: labels,
         datasets: [{
-          label: 'Detection Rate',
-          data: [stats.monthly_detection_rate || 0],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 6
+          label: 'Patients Registered',
+          data: data,
+          backgroundColor: 'rgba(99, 102, 241, 0.8)',
+          borderColor: 'rgba(99, 102, 241, 1)',
+          borderWidth: 1,
+          borderRadius: 4,
         }]
       },
       options: {
@@ -611,14 +716,22 @@ function initializeCharts(stats) {
         scales: {
           y: {
             beginAtZero: true,
-            max: 100,
             ticks: {
-              callback: function(value) { return value + '%'; }
+              precision: 0,
+              stepSize: 1
             },
-            grid: { color: '#f1f5f9' }
+            grid: { color: '#f1f5f9' },
+            title: {
+              display: true,
+              text: 'Number of Patients'
+            }
           },
           x: {
-            grid: { display: false }
+            grid: { display: false },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45
+            }
           }
         }
       }
@@ -632,5 +745,32 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateTime, 60000);
   loadDashboardStats();
 });
+
+// Delete patient function
+async function deletePatient(patientId, patientName) {
+  if (!confirm(`Are you sure you want to delete patient "${patientName}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/v1/patients/${patientId}`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      credentials: 'include'
+    });
+
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      const result = await response.json();
+      alert(`Failed to delete patient: ${result.error || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Failed to delete patient. Please try again.');
+  }
+}
 </script>
 {% endblock %}

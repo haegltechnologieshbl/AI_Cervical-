@@ -27,6 +27,7 @@ urlpatterns = [
     path("patients/", views.PatientManagementView.as_view(), name="patient-management"),
     path("patient/<uuid:patient_id>", views.PatientProfileView.as_view(), name="patient-profile"),
     path("patient/add/", views.AddPatientView.as_view(), name="add-patient"),
+    path("patient/edit/<uuid:patient_id>", views.AddPatientView.as_view(), name="edit-patient"),
 
     # --- REST API ---
     path("api/v1/analyze", views.AnalyzeView.as_view(), name="analyze"),

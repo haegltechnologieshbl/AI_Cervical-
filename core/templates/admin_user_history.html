@@ -157,7 +157,7 @@
                                 {{ analysis.created_at|date:"M d, Y H:i" }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {{ analysis.patient.name|default:"Anonymous" }}
+                                {% if analysis.patient %}{{ analysis.patient.full_name }}{% else %}<span class="text-gray-400">No patient</span>{% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
@@ -220,12 +220,17 @@
     const analysisIdsStr = userData.getAttribute('data-analyses') || '';
     const analysisIds = analysisIdsStr ? analysisIdsStr.split(',') : [];
 
+    function getCookie(name) {
+        return document.cookie.split('; ').find(r => r.startsWith(name+'='))?.split('=')[1] || '';
+    }
+
     async function downloadReport(analysisId) {
         try {
             const response = await fetch('/api/v1/reports/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({

@@ -168,7 +168,20 @@
               <i class="fas fa-tachometer-alt w-5 text-center mr-3"></i>
               Dashboard
             </a>
+             <a href="{% url 'admin-registered-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-registered-users' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-user-plus w-5 text-center mr-3"></i>
+              Patients
+              {% if new_users_count > 0 %}
+              <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ new_users_count }}</span>
+              {% endif %}
+            </a>
+            <a href="{% url 'admin-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-users' or request.resolver_match.url_name == 'admin-user-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-user-md w-5 text-center mr-3"></i>
+              Doctors List
+            </a>
+           
           </div>
+          
 
           <!-- Data Analysis Section -->
           <div>
@@ -183,31 +196,9 @@
             </a>
           </div>
 
-          <!-- Doctors Section -->
-          <div>
-            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Doctors</p>
-            <a href="{% url 'admin-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-users' or request.resolver_match.url_name == 'admin-user-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
-              <i class="fas fa-user-md w-5 text-center mr-3"></i>
-              Doctors List
-            </a>
-            <a href="{% url 'admin-registered-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-registered-users' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
-              <i class="fas fa-user-plus w-5 text-center mr-3"></i>
-              Registered Patients
-              {% if new_users_count > 0 %}
-              <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ new_users_count }}</span>
-              {% endif %}
-            </a>
-          </div>
+         
 
-          <!-- Patients Section -->
-          <div>
-            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patients</p>
-            <a href="{% url 'admin-patients' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-patients' or request.resolver_match.url_name == 'admin-patient-profile' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
-              <i class="fas fa-hospital-user w-5 text-center mr-3"></i>
-              All Patient Lists
-            </a>
-          </div>
-
+         
           <!-- Results Section -->
           <div>
             <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Results</p>

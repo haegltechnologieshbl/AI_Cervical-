@@ -88,9 +88,7 @@
             History
           </a>
 
-          <a href="{% url 'settings-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'settings-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
-            Settings
-          </a>
+        
         </div>
 
         <!-- Right side -->
@@ -115,7 +113,6 @@
                 <p class="text-xs text-gray-500">{{ request.user.email }}</p>
               </div>
               <a href="{% url 'user-profile-page' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Profile</a>
-              <a href="{% url 'settings-page' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
               <button onclick="logout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
             </div>
           </div>
@@ -126,10 +123,7 @@
           </a>
           {% endif %}
 
-          <!-- Research Badge -->
-          <span class="hidden sm:inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold">
-            Research Use Only
-          </span>
+          
         </div>
 
         <!-- Mobile menu button -->
@@ -159,9 +153,7 @@
         <a href="{% url 'history-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           History
         </a>
-        <a href="{% url 'settings-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'settings-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
-          Settings
-        </a>
+        
       </div>
     </div>
   </nav>

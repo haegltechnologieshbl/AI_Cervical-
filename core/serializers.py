@@ -22,7 +22,7 @@ class PatientSerializer(serializers.ModelSerializer):
             'phone', 'email', 'address',
             'hpv_status', 'last_screening_date', 'pregnancy_status',
             'medical_history', 'medications', 'allergies', 'family_history',
-            'notes', 'created_at', 'updated_at', 'analyses_count',
+            'notes', 'created_at', 'updated_at', 'analyses_count', 'created_by',
 
             # New personal fields
             'marital_status', 'occupation', 'education_level', 'blood_group',
@@ -44,7 +44,7 @@ class PatientSerializer(serializers.ModelSerializer):
             # New medical fields
             'current_figo_stage', 'latest_figo_stage',
         ]
-        read_only_fields = ['patient_id', 'created_at', 'updated_at']
+        read_only_fields = ['patient_id', 'created_at', 'updated_at', 'created_by']
 
     def get_full_name(self, obj):
         return obj.full_name
