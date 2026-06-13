@@ -33,6 +33,10 @@ import os
 import uuid
 from django.conf import settings
 from PIL import Image
+from django.core.mail import send_mail
+from django.core.cache import cache
+import random
+import string
 
 User = get_user_model()
 
@@ -100,6 +104,12 @@ class HistoryPageView(View):
             analyses_qs = Analysis.objects.filter(
                 created_by=request.user
             ).select_related("created_by", "created_by__profile", "patient")
+
+        # Filter out non-primary batch analyses (show only the primary analysis from each batch)
+        # This prevents showing 10 separate entries when user uploads 10 images as a batch
+        analyses_qs = analyses_qs.filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+        )
 
         # Apply filters
         if date_from:
@@ -305,16 +315,79 @@ class AnalysisDetailView(View):
     def get(self, request, analysis_id):
         analysis = get_object_or_404(Analysis, pk=analysis_id)
 
+        # If this is part of a batch but not the primary analysis, redirect to primary
+        if analysis.batch_id and not analysis.is_batch_primary:
+            try:
+                primary_analysis = Analysis.objects.filter(batch_id=analysis.batch_id, is_batch_primary=True).first()
+                if primary_analysis:
+                    return redirect(f'/analysis/{primary_analysis.analysis_id}')
+            except:
+                pass  # If primary not found, show current analysis
+
         # Convert probabilities and scores to percentages for display
         probabilities_pct = {k: round(float(v) * 100, 2) for k, v in analysis.probabilities.items()}
         confidence_pct = round(analysis.confidence * 100, 1)
         uncertainty_pct = round(analysis.uncertainty * 100, 1)
+
+        # Fetch batch information if this is a batch primary analysis
+        batch_analyses = []
+        batch_data = None
+        if analysis.batch_id and analysis.is_batch_primary:
+            batch_analyses = list(Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position'))
+            batch_data = analysis.batch_aggregated_data
+            print(f"[DEBUG] Loading batch: batch_id={analysis.batch_id}, batch_analyses count={len(batch_analyses)}")
+            # Convert batch confidence to percentage for display
+            if batch_data:
+                # Handle both flat and nested batch_data structures
+                if 'averaged_prediction' not in batch_data and 'confidence' in batch_data:
+                    # Convert flat structure to nested for template compatibility
+                    batch_data['averaged_prediction'] = {
+                        'predicted_class': batch_data.get('predicted_class'),
+                        'predicted_label': batch_data.get('predicted_label'),
+                        'stage_label': batch_data.get('stage_label'),
+                        'probabilities': batch_data.get('probabilities'),
+                        'confidence': batch_data.get('confidence'),
+                        'uncertainty': batch_data.get('uncertainty'),
+                        'confidence_level': batch_data.get('confidence_level'),
+                        'risk_level': batch_data.get('risk_level'),
+                        'risk_color': batch_data.get('risk_color'),
+                        'confidence_interpretation': batch_data.get('confidence_interpretation'),
+                        'recommendation': batch_data.get('recommendation'),
+                        'explanation': batch_data.get('explanation'),
+                    }
+                if 'averaged_prediction' in batch_data:
+                    batch_data['averaged_prediction']['confidence_pct'] = round(
+                        batch_data['averaged_prediction'].get('confidence', 0) * 100, 1
+                    )
+            # Add confidence percentage to each batch analysis for display
+            for ba in batch_analyses:
+                ba.confidence_pct = round(ba.confidence * 100, 1)
+                # Compute probabilities percentage for each batch analysis
+                ba.probabilities_pct = {k: round(v * 100, 1) for k, v in ba.probabilities.items()}
+                print(f"[DEBUG] Batch analysis {ba.batch_position}: confidence={ba.confidence}, confidence_pct={ba.confidence_pct}")
+
+        # Get all analyses for this patient to show thumbnail gallery
+        patient_analyses = []
+        if analysis.patient:
+            patient_analyses = list(
+                Analysis.objects.filter(
+                    patient=analysis.patient
+                ).order_by('-created_at').select_related('patient')
+            )
+            # Add confidence percentage to each patient analysis
+            for pa in patient_analyses:
+                pa.confidence_pct = round(pa.confidence * 100, 1)
+                pa.is_current = (pa.analysis_id == analysis.analysis_id)
 
         context = {
             'analysis': analysis,
             'probabilities': probabilities_pct,
             'confidence_pct': confidence_pct,
             'uncertainty_pct': uncertainty_pct,
+            'batch_analyses': batch_analyses,
+            'batch_data': batch_data,
+            'is_batch': bool(analysis.batch_id),
+            'patient_analyses': patient_analyses,
         }
         return render(request, "analysis_detail.html", context)
 
@@ -414,8 +487,41 @@ class HospitalDashboardStatsView(APIView):
 
         # Analysis Statistics
         total_analyses = analysis_queryset.count()
-        positive_cases = analysis_queryset.filter(predicted_class__gte=3).count()
-        negative_cases = analysis_queryset.filter(predicted_class__lte=2).count()
+
+        # Count unique patients for positive/negative cases (not total analyses)
+        # Positive cases: patients whose most recent analysis is class 3 or 4 (HSIL/Carcinoma)
+        positive_patients = patient_queryset.filter(
+            analyses__predicted_class__gte=3
+        ).distinct().count()
+
+        # Negative cases: patients whose most recent analysis is class 0, 1, or 2 (Normal/ASC-US/LSIL)
+        negative_patients = patient_queryset.filter(
+            analyses__predicted_class__lte=2
+        ).distinct().count()
+
+        # For patients with multiple analyses, only count their latest result
+        # Get the most recent analysis for each patient
+        from django.db.models import Max
+
+        latest_analyses = Analysis.objects.filter(
+            patient__in=patient_queryset
+        ).values('patient').annotate(
+            latest_analysis=Max('analysis_id')
+        )
+
+        latest_analysis_ids = [item['latest_analysis'] for item in latest_analyses]
+
+        # Recount based on latest analysis only
+        positive_cases = Analysis.objects.filter(
+            analysis_id__in=latest_analysis_ids,
+            predicted_class__gte=3
+        ).count()
+
+        negative_cases = Analysis.objects.filter(
+            analysis_id__in=latest_analysis_ids,
+            predicted_class__lte=2
+        ).count()
+
         pending_reviews = analysis_queryset.filter(
             recommendation__isnull=True
         ).count()
@@ -683,15 +789,36 @@ class PatientProfileView(View):
 
         analyses = Analysis.objects.filter(
             patient=patient
-        ).order_by('-created_at')
+        ).filter(
+            # Show only: batch primary analyses OR standalone analyses (not batch members)
+            Q(is_batch_primary=True) | Q(batch_id__isnull=True)
+        ).order_by('-created_at').distinct()
 
         # Convert confidence to percentages for display
         for analysis in analyses:
-            analysis.confidence_pct = round(analysis.confidence * 100, 1)
-            analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
-            # Convert probabilities dict values to percentages
-            if analysis.probabilities:
-                analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
+            # For batch primary analyses, use aggregated confidence and data
+            if analysis.is_batch_primary and analysis.batch_aggregated_data:
+                agg_data = analysis.batch_aggregated_data.get('averaged_prediction', {})
+                analysis.confidence_pct = round(agg_data.get('confidence', analysis.confidence) * 100, 1)
+                analysis.uncertainty_pct = round(agg_data.get('uncertainty', analysis.uncertainty) * 100, 1)
+                # Override confidence for display with aggregated value
+                analysis.display_confidence = agg_data.get('confidence', analysis.confidence)
+                # Use aggregated probabilities if available
+                aggregated_probs = agg_data.get('probabilities', {})
+                if aggregated_probs:
+                    analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in aggregated_probs.items()}
+                elif analysis.probabilities:
+                    analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
+                # Store batch total count for display
+                analysis.batch_count = analysis.batch_total_count or 1
+            else:
+                analysis.confidence_pct = round(analysis.confidence * 100, 1)
+                analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
+                analysis.display_confidence = analysis.confidence
+                # Convert probabilities dict values to percentages
+                if analysis.probabilities:
+                    analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
+                analysis.batch_count = 1
 
         total_analyses = analyses.count()
         if total_analyses > 0:
@@ -1391,9 +1518,29 @@ class AdminAnalysisDetailView(View):
 
         analysis = get_object_or_404(Analysis, pk=analysis_id)
 
+        # If this is part of a batch but not the primary analysis, redirect to primary
+        if analysis.batch_id and not analysis.is_batch_primary:
+            try:
+                primary_analysis = Analysis.objects.filter(batch_id=analysis.batch_id, is_batch_primary=True).first()
+                if primary_analysis:
+                    return redirect(f'/admin/analysis/{primary_analysis.analysis_id}')
+            except:
+                pass  # If primary not found, show current analysis
+
         probabilities_pct = {k: round(float(v) * 100, 2) for k, v in analysis.probabilities.items()}
         confidence_pct = round(analysis.confidence * 100, 1)
         uncertainty_pct = round(analysis.uncertainty * 100, 1)
+
+        # Fetch batch information if this is a batch primary analysis
+        batch_analyses = []
+        batch_data = None
+        if analysis.batch_id and analysis.is_batch_primary:
+            batch_analyses = list(Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position'))
+            batch_data = analysis.batch_aggregated_data
+            # Add confidence percentage and probabilities to each batch analysis
+            for ba in batch_analyses:
+                ba.confidence_pct = round(ba.confidence * 100, 1)
+                ba.probabilities_pct = {k: round(v * 100, 1) for k, v in ba.probabilities.items()}
 
         context = {
             'analysis': analysis,
@@ -1401,6 +1548,9 @@ class AdminAnalysisDetailView(View):
             'confidence_pct': confidence_pct,
             'uncertainty_pct': uncertainty_pct,
             'user_role': 'admin',
+            'batch_analyses': batch_analyses,
+            'batch_data': batch_data,
+            'is_batch': bool(analysis.batch_id),
         }
         return render(request, "admin_analysis_detail.html", context)
 
@@ -1566,6 +1716,8 @@ class AdminUserHistoryView(View):
 
         analyses = Analysis.objects.filter(
             created_by=target_user
+        ).filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
         ).order_by('-created_at')[:50]
 
         total_analyses = analyses.count()
@@ -2027,6 +2179,9 @@ class AnalyzeView(APIView):
         predictions_list = []
         analysis_records = []
 
+        # Generate batch_id for multi-image uploads
+        batch_id = uuid.uuid4() if len(files) > 1 else None
+
         # Process each uploaded image
         invalid_images = []
         for idx, image_file in enumerate(files):
@@ -2080,6 +2235,11 @@ class AnalyzeView(APIView):
                     patient=patient,
                     image=image_file,
                     **prediction,
+                    # Batch metadata
+                    batch_id=batch_id,
+                    is_batch_primary=(idx == 0 and len(files) > 1),
+                    batch_total_count=len(files) if len(files) > 1 else None,
+                    batch_position=idx + 1 if len(files) > 1 else None,
                 )
                 analysis_records.append(analysis)
                 safe_print(f"[DEBUG] ✓ Stored analysis for file {idx+1}: {analysis.analysis_id}")
@@ -2099,6 +2259,31 @@ class AnalyzeView(APIView):
         # Average predictions across all images
         safe_print(f"[DEBUG] Averaging {len(predictions_list)} predictions")
         averaged_prediction = svc.average_predictions(predictions_list)
+
+        # Store aggregated data in the primary analysis if it's a batch
+        if batch_id and analysis_records:
+            primary_analysis = analysis_records[0]
+            primary_analysis.batch_aggregated_data = {
+                "averaged_prediction": {
+                    "predicted_class": averaged_prediction["predicted_class"],
+                    "predicted_label": averaged_prediction["predicted_label"],
+                    "stage_label": averaged_prediction.get("stage_label"),
+                    "probabilities": averaged_prediction["probabilities"],
+                    "confidence": averaged_prediction["confidence"],
+                    "uncertainty": averaged_prediction.get("uncertainty"),
+                    "confidence_level": averaged_prediction.get("confidence_level"),
+                    "risk_level": averaged_prediction.get("risk_level"),
+                    "risk_color": averaged_prediction.get("risk_color"),
+                    "confidence_interpretation": averaged_prediction.get("confidence_interpretation"),
+                    "recommendation": averaged_prediction.get("recommendation"),
+                    "explanation": averaged_prediction.get("explanation"),
+                },
+                "images_analyzed": len(predictions_list),
+                "images_total": len(files),
+                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+            }
+            primary_analysis.save()
+            safe_print(f"[DEBUG] ✓ Updated primary analysis with aggregated data")
 
 
         # Generate frames of the results
@@ -2205,6 +2390,9 @@ class FastAnalyzeView(APIView):
         analysis_records = []
         invalid_images = []
 
+        # Generate batch_id for multi-image uploads
+        batch_id = uuid.uuid4() if len(files) > 1 else None
+
         for idx, image_file in enumerate(files):
             if image_file.content_type not in allowed_types:
                 return Response(
@@ -2236,9 +2424,11 @@ class FastAnalyzeView(APIView):
                 predictions_list.append(prediction)
 
                 image_file.seek(0)
+                # Remove fields not in Analysis model
                 extra_fields = {}
-                for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation"):
-                    extra_fields[key] = prediction.pop(key)
+                for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation", "inference_time", "heatmap"):
+                    if key in prediction:
+                        extra_fields[key] = prediction.pop(key)
 
                 # Get patient_id from request
                 patient_id = request.data.get('patient_id')
@@ -2255,6 +2445,11 @@ class FastAnalyzeView(APIView):
                     patient=patient,
                     image=image_file,
                     **prediction,
+                    # Batch metadata
+                    batch_id=batch_id,
+                    is_batch_primary=(idx == 0 and len(files) > 1),
+                    batch_total_count=len(files) if len(files) > 1 else None,
+                    batch_position=idx + 1 if len(files) > 1 else None,
                 )
                 analysis_records.append(analysis)
                 print(f"[FAST] ✓ Stored analysis for file {idx+1}")
@@ -2274,6 +2469,30 @@ class FastAnalyzeView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         averaged_prediction = svc.average_predictions(predictions_list)
+
+        # Update primary analysis with aggregated data
+        if len(files) > 1 and analysis_records:
+            primary_analysis = analysis_records[0]
+            primary_analysis.batch_aggregated_data = {
+                "averaged_prediction": {
+                    "predicted_class": averaged_prediction["predicted_class"],
+                    "predicted_label": averaged_prediction["predicted_label"],
+                    "stage_label": averaged_prediction["stage_label"],
+                    "probabilities": averaged_prediction["probabilities"],
+                    "confidence": averaged_prediction["confidence"],
+                    "uncertainty": averaged_prediction["uncertainty"],
+                    "confidence_level": averaged_prediction["confidence_level"],
+                    "risk_level": averaged_prediction["risk_level"],
+                    "risk_color": averaged_prediction["risk_color"],
+                    "confidence_interpretation": averaged_prediction["confidence_interpretation"],
+                    "recommendation": averaged_prediction["recommendation"],
+                    "explanation": averaged_prediction["explanation"],
+                },
+                "images_analyzed": len(predictions_list),
+                "images_total": len(files),
+                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+            }
+            primary_analysis.save(update_fields=['batch_aggregated_data'])
 
         individual_results = []
         for record, pred in zip(analysis_records, predictions_list):
@@ -2366,6 +2585,9 @@ class VPSAnalyzeView(APIView):
         analysis_records = []
         invalid_images = []
 
+        # Generate batch_id for multi-image uploads
+        batch_id = uuid.uuid4() if len(files) > 1 else None
+
         for idx, image_file in enumerate(files):
             if image_file.content_type not in allowed_types:
                 return Response(
@@ -2415,6 +2637,11 @@ class VPSAnalyzeView(APIView):
                     uncertainty=prediction["uncertainty"],
                     confidence_level=prediction["confidence_level"],
                     recommendation=prediction["recommendation"],
+                    # Batch metadata
+                    batch_id=batch_id,
+                    is_batch_primary=(idx == 0 and len(files) > 1),
+                    batch_total_count=len(files) if len(files) > 1 else None,
+                    batch_position=idx + 1 if len(files) > 1 else None,
                 )
                 analysis_records.append(analysis)
                 print(f"[ULTRA] ✓ {idx+1}/{len(files)} complete")
@@ -2434,6 +2661,30 @@ class VPSAnalyzeView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         averaged_prediction = svc.average_predictions(predictions_list)
+
+        # Update primary analysis with aggregated data
+        if len(files) > 1 and analysis_records:
+            primary_analysis = analysis_records[0]
+            primary_analysis.batch_aggregated_data = {
+                "averaged_prediction": {
+                    "predicted_class": averaged_prediction["predicted_class"],
+                    "predicted_label": averaged_prediction["predicted_label"],
+                    "stage_label": averaged_prediction.get("stage_label"),
+                    "probabilities": averaged_prediction["probabilities"],
+                    "confidence": averaged_prediction["confidence"],
+                    "uncertainty": averaged_prediction.get("uncertainty"),
+                    "confidence_level": averaged_prediction.get("confidence_level"),
+                    "risk_level": averaged_prediction.get("risk_level"),
+                    "risk_color": averaged_prediction.get("risk_color"),
+                    "confidence_interpretation": averaged_prediction.get("confidence_interpretation"),
+                    "recommendation": averaged_prediction.get("recommendation"),
+                    "explanation": averaged_prediction.get("explanation"),
+                },
+                "images_analyzed": len(predictions_list),
+                "images_total": len(files),
+                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+            }
+            primary_analysis.save(update_fields=['batch_aggregated_data'])
 
         # Generate frames for slideshow (only for <= 30 images to save time)
         frame_urls = []
@@ -2545,7 +2796,7 @@ class ReportView(APIView):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
         from reportlab.lib.units import cm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_LEFT, TA_CENTER
         from reportlab.pdfbase import pdfmetrics
@@ -2572,6 +2823,15 @@ class ReportView(APIView):
         small_style = ParagraphStyle('Small', parent=styles['Normal'],
                                      fontSize=9, textColor=colors.black)
 
+        # Stage colors for results
+        stage_colors = {
+            0: '#22c55e',
+            1: '#84cc16',
+            2: '#eab308',
+            3: '#f97316',
+            4: '#ef4444'
+        }
+
         content = []
 
         # Header
@@ -2586,6 +2846,7 @@ class ReportView(APIView):
         if patient:
             content.append(Paragraph("Patient Information", heading_style))
 
+            # Basic Information - Only fields used in patient creation form
             patient_data = [
                 ['Full Name:', patient.full_name or '—'],
                 ['Patient ID:', str(patient.patient_id)[:8] if patient.patient_id else '—'],
@@ -2594,10 +2855,6 @@ class ReportView(APIView):
                 ['Phone:', patient.phone or '—'],
                 ['Email:', patient.email or '—'],
                 ['Date of Birth:', patient.date_of_birth.strftime('%Y-%m-%d') if patient.date_of_birth else '—'],
-                ['Marital Status:', patient.get_marital_status_display() or '—'],
-                ['Occupation:', patient.occupation or '—'],
-                ['Education:', patient.get_education_level_display() or '—'],
-                ['Blood Group:', patient.blood_group or '—'],
                 ['Address:', patient.address or '—'],
             ]
 
@@ -2621,63 +2878,16 @@ class ReportView(APIView):
             content.append(patient_table)
             content.append(Spacer(1, 0.3*cm))
 
-            # Location & Identification
-            content.append(Paragraph("Location & Identification", heading_style))
-            location_data = [
-                ['District:', patient.district or '—'],
-                ['State:', patient.state or '—'],
-                ['PIN Code:', patient.pin_code or '—'],
-                ['Aadhaar Number:', patient.aadhaar_number or '—'],
-                ['ABHA Health ID:', patient.abha_health_id or '—'],
-                ['Medical Record No.:', patient.medical_record_number or '—'],
-            ]
-
-            location_table_data = []
-            for i in range(0, len(location_data), 3):
-                row = []
-                for j in range(i, min(i + 3, len(location_data))):
-                    label, value = location_data[j]
-                    row.append(Paragraph(f"<b>{label}</b> {value}", small_style))
-                while len(row) < 3:
-                    row.append('')
-                location_table_data.append(row)
-
-            location_table = Table(location_table_data, colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
-            location_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
-            ]))
-            content.append(location_table)
-            content.append(Spacer(1, 0.3*cm))
-
-            # Emergency Contact
-            if patient.emergency_contact_name:
-                content.append(Paragraph("Emergency Contact", heading_style))
-                emergency_data = [
-                    ['Contact Name:', patient.emergency_contact_name or '—'],
-                    ['Relationship:', patient.emergency_contact_relationship or '—'],
-                    ['Contact Number:', patient.emergency_contact_number or '—'],
-                ]
-                emergency_table = Table([
-                    [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in emergency_data]
-                ], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
-                emergency_table.setStyle(TableStyle([
-                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ]))
-                content.append(emergency_table)
-                content.append(Spacer(1, 0.3*cm))
-
             # Medical Information
             content.append(Paragraph("Medical Information", heading_style))
             medical_info_data = [
                 ['HPV Status:', patient.get_hpv_status_display() or '—'],
                 ['Last Screening:', patient.last_screening_date.strftime('%Y-%m-%d') if patient.last_screening_date else '—'],
                 ['Pregnancy Status:', patient.get_pregnancy_status_display() or '—'],
-                ['Current FIGO Stage:', f"Stage {patient.current_figo_stage}" if patient.current_figo_stage else '—'],
             ]
             medical_table = Table([
                 [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in medical_info_data]
-            ], colWidths=[5.3*cm, 5.3*cm, 5.3*cm, 5.3*cm])
+            ], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
             medical_table.setStyle(TableStyle([
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ]))
@@ -2685,7 +2895,7 @@ class ReportView(APIView):
             content.append(Spacer(1, 0.3*cm))
 
             # Medical History (if available)
-            if any([patient.medical_history, patient.medications, patient.allergies, patient.family_history]):
+            if any([patient.medical_history, patient.medications, patient.allergies, patient.family_history, patient.notes]):
                 content.append(Paragraph("Medical History", heading_style))
 
                 history_data = []
@@ -2697,6 +2907,8 @@ class ReportView(APIView):
                     history_data.append(['Allergies:', patient.allergies])
                 if patient.family_history:
                     history_data.append(['Family History:', patient.family_history])
+                if patient.notes:
+                    history_data.append(['Additional Notes:', patient.notes])
 
                 for label, value in history_data:
                     history_table = Table([
@@ -2728,15 +2940,145 @@ class ReportView(APIView):
         content.append(report_table)
         content.append(Spacer(1, 0.5*cm))
 
+        # Images Analyzed Section
+        # Check if this is a batch analysis
+        batch_analyses = []
+        if analysis.batch_id:
+            batch_analyses = list(Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position'))
+            # Add computed probabilities to each batch analysis
+            for ba in batch_analyses:
+                ba.confidence_pct = round(ba.confidence * 100, 1)
+                ba.probabilities_pct = {k: round(v * 100, 1) for k, v in ba.probabilities.items()}
+
+        if batch_analyses:
+            # Batch Analysis Report
+            content.append(Paragraph("Batch Analysis Report", heading_style))
+            content.append(Paragraph(f"Batch ID: {str(analysis.batch_id)[:8]} — {len(batch_analyses)} images analyzed", small_style))
+            content.append(Spacer(1, 0.3*cm))
+
+            # Show each batch image with its results
+            for idx, ba in enumerate(batch_analyses, 1):
+                content.append(Paragraph(f"Image {idx}", heading_style))
+
+                if ba.image and os.path.exists(ba.image.path):
+                    try:
+                        # Create image with proper sizing
+                        img = Image(ba.image.path, width=6*cm, height=4.5*cm, lazy=2, hAlign='LEFT')
+                        img.hAlign = 'LEFT'
+                        content.append(img)
+                        content.append(Spacer(1, 0.2*cm))
+                    except Exception as e:
+                        content.append(Paragraph(f"<b>Note:</b> Unable to include image. Error: {str(e)}", small_style))
+
+                # Individual result for this image
+                result_color_hex = stage_colors.get(ba.predicted_class, '#808080')
+                result_data = [
+                    [Paragraph("Predicted Stage:", small_style),
+                     Paragraph(f"<font size=12 color='{result_color_hex}'>{ba.predicted_label}</font>", normal_style)],
+                    ['Confidence:', f"{ba.confidence_pct}%"],
+                ]
+
+                result_table = Table(result_data, colWidths=[4*cm, 13*cm])
+                result_table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.15*cm),
+                ]))
+                content.append(result_table)
+                content.append(Spacer(1, 0.2*cm))
+
+                # Mini probabilities table
+                prob_data = [['Class', 'Prob']]
+                for label, prob in sorted(ba.probabilities_pct.items(), key=lambda x: float(x[1]), reverse=True):
+                    prob_data.append([
+                        Paragraph(label, small_style),
+                        Paragraph(f"{prob:.1f}%", small_style)
+                    ])
+
+                prob_table = Table(prob_data, colWidths=[4*cm, 2*cm])
+                prob_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.1*cm),
+                ]))
+                content.append(prob_table)
+                content.append(Spacer(1, 0.3*cm))
+
+                # Add page break after every 2 images (except last)
+                if idx < len(batch_analyses) and idx % 2 == 0:
+                    content.append(PageBreak())
+
+            # Add averaged/batch results summary
+            content.append(PageBreak())
+            content.append(Paragraph("Batch Analysis Summary", heading_style))
+
+            if analysis.batch_aggregated_data:
+                agg_data = analysis.batch_aggregated_data
+                avg_pred = agg_data.get('averaged_prediction', {})
+
+                result_color_hex = stage_colors.get(avg_pred.get('predicted_class', 0), '#808080')
+                result_data = [
+                    [Paragraph("Averaged Prediction:", small_style),
+                     Paragraph(f"<font size=14 color='{result_color_hex}'>{avg_pred.get('predicted_label', 'N/A')}</font>", normal_style)],
+                    ['Confidence:', f"{round(avg_pred.get('confidence', 0) * 100)}%"],
+                ]
+
+                result_table = Table(result_data, colWidths=[5*cm, 12*cm])
+                result_table.setStyle(TableStyle([
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
+                ]))
+                content.append(result_table)
+                content.append(Spacer(1, 0.3*cm))
+
+        elif analysis.image:
+            # Single image analysis
+            content.append(Paragraph("Images Analyzed", heading_style))
+
+            # Get image path
+            image_path = analysis.image.path
+            if os.path.exists(image_path):
+                try:
+                    # Create image with proper sizing (max width 8cm, max height 6cm)
+                    img = Image(image_path, width=8*cm, height=6*cm, lazy=2, hAlign='CENTER')
+                    img.hAlign = 'CENTER'
+                    content.append(img)
+                    content.append(Spacer(1, 0.3*cm))
+
+                    # Image info table
+                    from PIL import Image as PILImage
+                    with PILImage.open(image_path) as pil_img:
+                        width, height = pil_img.size
+                        image_format = pil_img.format or 'Unknown'
+                        file_size = os.path.getsize(image_path) / (1024 * 1024)  # Size in MB
+
+                    image_info_data = [
+                        ['File Name:', os.path.basename(image_path)],
+                        ['Dimensions:', f"{width} x {height} pixels"],
+                        ['Format:', image_format],
+                        ['File Size:', f"{file_size:.2f} MB"],
+                    ]
+
+                    image_info_table = Table([
+                        [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in image_info_data]
+                    ], colWidths=[8.5*cm, 8.5*cm])
+                    image_info_table.setStyle(TableStyle([
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 0.15*cm),
+                    ]))
+                    content.append(image_info_table)
+                    content.append(Spacer(1, 0.5*cm))
+                except Exception as e:
+                    content.append(Paragraph(f"<b>Note:</b> Unable to include image in report. Error: {str(e)}", small_style))
+                    content.append(Spacer(1, 0.3*cm))
+            else:
+                content.append(Paragraph("<b>Note:</b> Image file not found on server.", small_style))
+                content.append(Spacer(1, 0.3*cm))
+
         # Staging Result
         content.append(Paragraph("Staging Result", heading_style))
-        stage_colors = {
-            0: '#22c55e',
-            1: '#84cc16',
-            2: '#eab308',
-            3: '#f97316',
-            4: '#ef4444'
-        }
         result_color_hex = stage_colors.get(analysis.predicted_class, '#808080')
 
         result_data = [
@@ -2816,4 +3158,213 @@ class ReportView(APIView):
         buf.seek(0)
         return buf
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PASSWORD RESET VIEWS (CRUD)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ForgotPasswordView(View):
+    """GET/POST /forgot-password/ - Request password reset via OTP"""
+    def get(self, request):
+        return render(request, 'forgot_password.html')
+
+    def post(self, request):
+        email_or_username = request.POST.get('email_or_username')
+
+        if not email_or_username:
+            messages.error(request, 'Please enter your email or username')
+            return render(request, 'forgot_password.html')
+
+        # Find user by email or username
+        try:
+            user = User.objects.get(
+                Q(username=email_or_username) | Q(email=email_or_username)
+            )
+        except User.DoesNotExist:
+            # Don't reveal if user exists or not for security
+            messages.success(request, 'If an account exists with this email/username, an OTP has been sent.')
+            return render(request, 'forgot_password.html')
+
+        # Generate OTP
+        otp = ''.join(random.choices(string.digits, k=getattr(settings, 'OTP_LENGTH', 6)))
+        expiry_minutes = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+
+        # Store OTP in cache with expiration
+        cache_key = f'password_reset_otp_{user.username}'
+        cache.set(cache_key, {
+            'otp': otp,
+            'user_id': user.id,
+            'email': user.email
+        }, expiry_minutes * 60)
+
+        # Send OTP email
+        try:
+            subject = 'CerviStage AI - Password Reset OTP'
+            message = f'''
+Dear {user.get_full_name() or user.username},
+
+You have requested to reset your password for CerviStage AI.
+
+Your One-Time Password (OTP) is: {otp}
+
+This OTP will expire in {expiry_minutes} minutes.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+CerviStage AI Team
+'''
+
+            html_message = f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }}
+        .content {{ background: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0; }}
+        .otp {{ background: #fff; padding: 15px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border: 2px dashed #667eea; border-radius: 5px; }}
+        .footer {{ text-align: center; padding: 20px; color: #666; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 CerviStage AI</h1>
+            <p>Password Reset Request</p>
+        </div>
+        <div class="content">
+            <p>Dear <strong>{user.get_full_name() or user.username}</strong>,</p>
+            <p>You have requested to reset your password for CerviStage AI.</p>
+            <p>Your One-Time Password (OTP) is:</p>
+            <div class="otp">{otp}</div>
+            <p><strong>This OTP will expire in {expiry_minutes} minutes.</strong></p>
+            <p>If you did not request this password reset, please ignore this email.</p>
+        </div>
+        <div class="footer">
+            <p>Best regards,<br>CerviStage AI Team</p>
+            <p><em>This is an automated email. Please do not reply.</em></p>
+        </div>
+    </div>
+</body>
+</html>
+'''
+
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                html_message=html_message,
+                fail_silently=False
+            )
+
+            safe_print(f"[OTP] Sent to {user.email}")
+
+            # Store email in session for verification step
+            request.session['reset_email'] = user.email
+            request.session['reset_username'] = user.username
+
+            messages.success(request, f'OTP has been sent to your email. Valid for {expiry_minutes} minutes.')
+            return redirect('/verify-otp/')
+
+        except Exception as e:
+            safe_print(f"[OTP] Failed to send: {e}")
+            messages.error(request, 'Failed to send OTP. Please try again later.')
+            return render(request, 'forgot_password.html')
+
+
+class VerifyOTPView(View):
+    """GET/POST /verify-otp/ - Verify OTP and reset password"""
+    def get(self, request):
+        if 'reset_email' not in request.session:
+            return redirect('/forgot-password/')
+        return render(request, 'verify_otp.html')
+
+    def post(self, request):
+        otp = request.POST.get('otp')
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+
+        if not otp or not new_password:
+            messages.error(request, 'Please fill in all fields')
+            return render(request, 'verify_otp.html')
+
+        if new_password != confirm_password:
+            messages.error(request, 'Passwords do not match')
+            return render(request, 'verify_otp.html')
+
+        if len(new_password) < 8:
+            messages.error(request, 'Password must be at least 8 characters long')
+            return render(request, 'verify_otp.html')
+
+        # Get user from session
+        username = request.session.get('reset_username')
+        if not username:
+            messages.error(request, 'Session expired. Please start over.')
+            return redirect('/forgot-password/')
+
+        # Get user
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            messages.error(request, 'User not found')
+            return redirect('/forgot-password/')
+
+        # Get stored OTP from cache
+        cache_key = f'password_reset_otp_{username}'
+        cached_data = cache.get(cache_key)
+
+        if not cached_data:
+            messages.error(request, 'OTP has expired or is invalid. Please request a new OTP.')
+            return render(request, 'verify_otp.html')
+
+        # Verify OTP
+        if cached_data['otp'] != otp:
+            messages.error(request, 'Invalid OTP. Please try again.')
+            return render(request, 'verify_otp.html')
+
+        # Reset password
+        try:
+            user.set_password(new_password)
+            user.save()
+
+            # Clear the used OTP and session
+            cache.delete(cache_key)
+            del request.session['reset_email']
+            del request.session['reset_username']
+
+            # Send confirmation email
+            try:
+                subject = 'CerviStage AI - Password Successfully Reset'
+                message = f'''
+Dear {user.get_full_name() or user.username},
+
+Your password has been successfully reset for CerviStage AI.
+
+If you did not initiate this change, please contact support immediately.
+
+Best regards,
+CerviStage AI Team
+'''
+
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=True
+                )
+            except:
+                pass  # Don't fail if confirmation email fails
+
+            safe_print(f"[PASSWORD RESET] Completed for {user.username}")
+
+            messages.success(request, 'Password reset successfully. You can now login with your new password.')
+            return redirect('/login/')
+
+        except Exception as e:
+            messages.error(request, f'Failed to reset password: {str(e)}')
+            return render(request, 'verify_otp.html')
 

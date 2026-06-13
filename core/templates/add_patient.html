@@ -51,9 +51,10 @@
 
                     <div>
                         <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
-                        <input type="number" id="age" name="age" min="0" max="150"
-                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        <input type="number" id="age" name="age" min="0" max="150" readonly
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                             value="{% if patient %}{{ patient.age }}{% endif %}">
+                        <p class="mt-1 text-xs text-gray-500">Auto-calculated from date of birth</p>
                     </div>
 
                     <div>
@@ -217,8 +218,36 @@ const errorMessage = document.getElementById('errorMessage');
 const errorText = document.getElementById('errorText');
 const successMessage = document.getElementById('successMessage');
 
-const isEditing = {% if patient %}true{% else %}false{% endif %};
-const patientId = {% if patient %}'{{ patient.patient_id }}'{% else %}null{% endif %};
+const isEditing = `{% if patient %}true{% else %}false{% endif %}`;
+const patientId = `{% if patient %}'{{ patient.patient_id }}'{% else %}null{% endif %}`;
+
+// Auto-calculate age from date of birth
+const dateOfBirthInput = document.getElementById('date_of_birth');
+const ageInput = document.getElementById('age');
+
+function calculateAge(dob) {
+    if (!dob) return '';
+
+    const birthDate = new Date(dob);
+    const today = new Date();
+
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    // If the current month is before the birth month, or if it's the birth month
+    // but the current day is before the birth day, subtract 1 from the age
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+
+    return age >= 0 ? age : '';
+}
+
+dateOfBirthInput.addEventListener('change', function() {
+    const dob = this.value;
+    const calculatedAge = calculateAge(dob);
+    ageInput.value = calculatedAge;
+});
 
 addPatientForm.addEventListener('submit', async (e) => {
     e.preventDefault();

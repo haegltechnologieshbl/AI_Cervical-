@@ -67,7 +67,7 @@ DATABASES = {
 }
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Kolkata"
 USE_TZ = True
 
 STATIC_URL = "/static/"
@@ -130,3 +130,17 @@ LOGOUT_URL = "/logout/"
 FILE_UPLOAD_HANDLERS = [
     "django.core.files.uploadhandler.TemporaryFileUploadHandler",
 ]
+
+# OTP Settings
+OTP_LENGTH = 6
+OTP_EXPIRY_MINUTES = 10
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'haegltechnologies1@gmail.com'
+EMAIL_HOST_PASSWORD = 'scbj komu oiyp gpqv'
+DEFAULT_FROM_EMAIL = 'CerviStage AI <noreply@cervistage.ai>'
+SERVER_EMAIL = DEFAULT_FROM_EMAIL

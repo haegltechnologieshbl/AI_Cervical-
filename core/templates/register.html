@@ -41,19 +41,27 @@
                     <label for="email" class="block text-sm font-medium text-gray-700">Email address</label>
                     <input id="email" name="email" type="email" required
                         class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                        placeholder="john.doe@example.com">
+                        placeholder="john.doe@gmail.com">
+                    <p class="text-xs text-gray-500 mt-1">Only @gmail.com addresses are allowed</p>
                 </div>
 
                 <div>
                     <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <input id="password" name="password" type="password" required minlength="6"
+                    <input id="password" name="password" type="password" required minlength="8"
                         class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                         placeholder="••••••••">
+                    <div class="mt-2 space-y-1">
+                        <p id="length" class="text-xs text-gray-500">❌ At least 8 characters</p>
+                        <p id="uppercase" class="text-xs text-gray-500">❌ At least 1 uppercase letter (A-Z)</p>
+                        <p id="lowercase" class="text-xs text-gray-500">❌ At least 1 lowercase letter (a-z)</p>
+                        <p id="number" class="text-xs text-gray-500">❌ At least 1 number (0-9)</p>
+                        <p id="special" class="text-xs text-gray-500">❌ At least 1 special character (!@#$%^&*)</p>
+                    </div>
                 </div>
 
                 <div>
                     <label for="confirm_password" class="block text-sm font-medium text-gray-700">Confirm Password</label>
-                    <input id="confirm_password" name="confirm_password" type="password" required minlength="6"
+                    <input id="confirm_password" name="confirm_password" type="password" required minlength="8"
                         class="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                         placeholder="••••••••">
                 </div>
@@ -139,6 +147,71 @@ const errorMessage = document.getElementById('errorMessage');
 const errorText = document.getElementById('errorText');
 const successMessage = document.getElementById('successMessage');
 
+// Password validation elements
+const passwordInput = document.getElementById('password');
+const emailInput = document.getElementById('email');
+
+// Password validation function
+function validatePassword(password) {
+    const requirements = {
+        length: password.length >= 8,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+    };
+
+    // Update UI for each requirement
+    document.getElementById('length').innerHTML = requirements.length ?
+        '<span class="text-green-600">✓ At least 8 characters</span>' :
+        '<span class="text-gray-500">❌ At least 8 characters</span>';
+    document.getElementById('uppercase').innerHTML = requirements.uppercase ?
+        '<span class="text-green-600">✓ At least 1 uppercase letter (A-Z)</span>' :
+        '<span class="text-gray-500">❌ At least 1 uppercase letter (A-Z)</span>';
+    document.getElementById('lowercase').innerHTML = requirements.lowercase ?
+        '<span class="text-green-600">✓ At least 1 lowercase letter (a-z)</span>' :
+        '<span class="text-gray-500">❌ At least 1 lowercase letter (a-z)</span>';
+    document.getElementById('number').innerHTML = requirements.number ?
+        '<span class="text-green-600">✓ At least 1 number (0-9)</span>' :
+        '<span class="text-gray-500">❌ At least 1 number (0-9)</span>';
+    document.getElementById('special').innerHTML = requirements.special ?
+        '<span class="text-green-600">✓ At least 1 special character (!@#$%^&*)</span>' :
+        '<span class="text-gray-500">❌ At least 1 special character (!@#$%^&*)</span>';
+
+    return Object.values(requirements).every(req => req === true);
+}
+
+// Email validation function (Gmail only)
+function validateEmail(email) {
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    return gmailRegex.test(email);
+}
+
+// Real-time password validation
+passwordInput.addEventListener('input', function() {
+    validatePassword(this.value);
+});
+
+// Real-time email validation
+emailInput.addEventListener('blur', function() {
+    if (this.value && !validateEmail(this.value)) {
+        this.classList.add('border-red-500');
+        this.classList.remove('border-gray-300');
+    } else {
+        this.classList.remove('border-red-500');
+        this.classList.add('border-gray-300');
+    }
+});
+
+emailInput.addEventListener('input', function() {
+    if (this.classList.contains('border-red-500')) {
+        if (validateEmail(this.value) || !this.value) {
+            this.classList.remove('border-red-500');
+            this.classList.add('border-gray-300');
+        }
+    }
+});
+
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorMessage.classList.add('hidden');
@@ -146,6 +219,21 @@ registerForm.addEventListener('submit', async (e) => {
 
     const password = document.getElementById('password').value;
     const confirmPassword = document.getElementById('confirm_password').value;
+    const email = document.getElementById('email').value;
+
+    // Validate email (Gmail only)
+    if (!validateEmail(email)) {
+        errorText.textContent = 'Only @gmail.com email addresses are allowed';
+        errorMessage.classList.remove('hidden');
+        return;
+    }
+
+    // Validate password
+    if (!validatePassword(password)) {
+        errorText.textContent = 'Password does not meet all requirements';
+        errorMessage.classList.remove('hidden');
+        return;
+    }
 
     if (password !== confirmPassword) {
         errorText.textContent = 'Passwords do not match';

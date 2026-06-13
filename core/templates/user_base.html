@@ -73,6 +73,7 @@
 
         <!-- Desktop Navigation -->
         <div class="hidden md:flex items-center space-x-1">
+          {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
           <!-- Regular User Navigation -->
           <a href="{% url 'analyze-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Analyze
@@ -87,8 +88,7 @@
           <a href="{% url 'history-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             History
           </a>
-
-        
+          {% endif %}
         </div>
 
         <!-- Right side -->
@@ -140,6 +140,7 @@
     <!-- Mobile menu -->
     <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-200">
       <div class="px-2 pt-2 pb-3 space-y-1">
+        {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
         <!-- Regular User Mobile Navigation -->
         <a href="{% url 'analyze-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Analyze
@@ -153,7 +154,7 @@
         <a href="{% url 'history-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           History
         </a>
-        
+        {% endif %}
       </div>
     </div>
   </nav>
@@ -166,21 +167,11 @@
   <!-- Footer -->
   <footer class="bg-white border-t border-gray-200 mt-auto">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="md:flex md:items-center md:justify-between">
-        <div class="flex justify-center space-x-6 md:order-2">
-          <span class="text-gray-400 hover:text-gray-500 text-sm">
-            <a href="#" class="hover:underline">Privacy</a>
-            <span class="mx-2">·</span>
-            <a href="#" class="hover:underline">Terms</a>
-            <span class="mx-2">·</span>
-            <a href="#" class="hover:underline">Support</a>
-          </span>
-        </div>
-        <div class="mt-8 md:mt-0 md:order-1">
+      <div class="md:flex md:items-center md:justify-center md:space-x-6">
+        
           <p class="text-center text-base text-gray-400">
             &copy; 2026 CerviStage AI. All rights reserved.
           </p>
-        </div>
       </div>
     </div>
   </footer>

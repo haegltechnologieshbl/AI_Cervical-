@@ -580,6 +580,13 @@ class Analysis(models.Model):
     recommendation = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Batch metadata for multi-image analyses
+    batch_id = models.UUIDField(null=True, blank=True, db_index=True, help_text="ID of the batch this analysis belongs to")
+    is_batch_primary = models.BooleanField(default=False, help_text="Whether this is the primary analysis showing aggregated results")
+    batch_total_count = models.IntegerField(null=True, blank=True, help_text="Total number of images in the batch")
+    batch_position = models.IntegerField(null=True, blank=True, help_text="Position of this image in the batch (1-indexed)")
+    batch_aggregated_data = models.JSONField(null=True, blank=True, help_text="Aggregated results for batch primary analysis")
+
     class Meta:
         ordering = ["-created_at"]
 
