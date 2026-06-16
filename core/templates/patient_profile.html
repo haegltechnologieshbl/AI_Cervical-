@@ -246,10 +246,112 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         {% endif %}
 
+        <!-- Risk Trend Chart -->
+        {% if total_analyses > 1 %}
+        <div class="bg-white shadow rounded-lg mb-8 p-5">
+          <h3 class="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+            </svg>
+            Risk Stage Trend
+          </h3>
+          <p class="text-xs text-gray-400 mb-4">Patient's predicted stage across all screenings (oldest → newest)</p>
+          <canvas id="riskTrendChart" style="max-height:200px"></canvas>
+        </div>
+        {% endif %}
+
+        <!-- Clinical Notes -->
+        <div id="notes" class="bg-white shadow rounded-lg mb-8">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              Clinical Notes
+            </h3>
+            <span class="text-xs text-gray-400">{{ clinical_notes|length }} note{{ clinical_notes|length|pluralize }}</span>
+          </div>
+
+          <!-- Add note form -->
+          <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+            <form method="post" action="/patient/{{ patient.patient_id }}/notes/add/">
+              {% csrf_token %}
+              <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Add Note</label>
+              <textarea name="note" rows="3" placeholder="Enter clinical observation, follow-up plan, or visit notes..."
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"></textarea>
+              <div class="flex items-center justify-between mt-2">
+                <span class="text-xs text-gray-400">Visible to all clinical staff</span>
+                <button type="submit"
+                  class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                  </svg>
+                  Save Note
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Notes list -->
+          {% if clinical_notes %}
+          <div class="divide-y divide-gray-50">
+            {% for cn in clinical_notes %}
+            <div class="px-5 py-4">
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex items-center gap-2 shrink-0">
+                  <div class="h-7 w-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700">
+                    {{ cn.created_by.get_full_name|default:cn.created_by.username|first|upper }}
+                  </div>
+                  <div>
+                    <p class="text-xs font-semibold text-gray-800">{{ cn.created_by.get_full_name|default:cn.created_by.username }}</p>
+                    <p class="text-xs text-gray-400">{{ cn.created_by.profile.get_role_display }}</p>
+                  </div>
+                </div>
+                <div class="text-right shrink-0">
+                  <p class="text-xs text-gray-400">{{ cn.created_at|date:"d M Y" }}</p>
+                  <p class="text-xs text-gray-300">{{ cn.created_at|date:"H:i" }}</p>
+                </div>
+              </div>
+              <p class="mt-2 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{{ cn.note }}</p>
+              {% if cn.analysis %}
+              <a href="/analysis/{{ cn.analysis.analysis_id }}"
+                 class="mt-2 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline font-medium">
+                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Linked to analysis {{ cn.analysis.created_at|date:"d M Y" }}
+              </a>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="px-5 py-10 text-center">
+            <svg class="mx-auto h-10 w-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+            <p class="text-sm text-gray-400">No clinical notes yet. Add the first one above.</p>
+          </div>
+          {% endif %}
+        </div>
+
         <!-- Analysis History -->
         <div class="bg-white shadow rounded-lg">
             <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Analysis History</h3>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Analysis History</h3>
+                    <form method="get" class="flex flex-wrap items-center gap-2">
+                        <input type="date" name="date_from" value="{{ date_from }}"
+                               class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        <span class="text-sm text-gray-500">to</span>
+                        <input type="date" name="date_to" value="{{ date_to }}"
+                               class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">Filter</button>
+                        {% if date_from or date_to %}
+                        <a href="?" class="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-200">Clear</a>
+                        {% endif %}
+                    </form>
+                </div>
                 {% if analyses %}
                 <div class="space-y-4">
                     {% for analysis in analyses %}
@@ -296,13 +398,26 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div class="bg-amber-50 rounded-lg p-2 border border-amber-100">
                                     <p class="text-xs text-amber-600 font-semibold">Risk Score</p>
-                                    <p class="text-sm font-bold text-amber-900">{{ analysis.display_confidence|floatformat:0 }}/100*</p>
+                                    <p class="text-sm font-bold text-amber-900">{{ analysis.confidence_pct|floatformat:0 }}/100*</p>
                                 </div>
                             </div>
                             {% if analysis.recommendation %}
                             <div class="mt-3 p-3 bg-green-50 rounded-lg border border-green-100">
                                 <p class="text-xs text-green-600 font-semibold mb-1">Screening Recommendation</p>
                                 <p class="text-sm text-green-800">{{ analysis.recommendation|truncatechars:100 }}</p>
+                            </div>
+                            {% endif %}
+                            {% if analysis.recommended_checkups %}
+                            <div class="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                                <p class="text-xs text-indigo-600 font-semibold mb-2">Patient Checkups Sent</p>
+                                <div class="flex flex-wrap gap-1.5">
+                                    {% for checkup in analysis.recommended_checkups %}
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-xs font-medium text-indigo-700">
+                                        <svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        {{ checkup }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
                             </div>
                             {% endif %}
                         </div>
@@ -318,6 +433,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     {% endfor %}
                 </div>
+                {% with extra_params="date_from="|add:date_from|add:"&date_to="|add:date_to %}
+                {% include 'includes/pagination.html' with page_obj=analyses extra_params=extra_params %}
+                {% endwith %}
                 {% else %}
                 <div class="text-center py-12">
                     <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -457,6 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 function analyzeCurrentPatient() {
     window.location.href = `/analyze/?patient_id={{ patient.patient_id }}`;
@@ -472,7 +591,60 @@ function hideEditModal() {
     document.body.style.overflow = 'auto';
 }
 
-// Form now submits normally to Django view - no JS interception needed
-// The modal will be hidden and page will reload after successful submission
+// ── Risk Trend Chart ────────────────────────────────────────────────────────
+{% if total_analyses > 1 %}
+(function () {
+  const dates   = {{ chart_dates|safe }};
+  const classes = {{ chart_classes|safe }};
+  const labelMap = {{ chart_labels_map|safe }};
+  const colors  = ['#22c55e','#84cc16','#eab308','#f97316','#ef4444'];
+
+  new Chart(document.getElementById('riskTrendChart'), {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        data: classes,
+        borderColor: classes.map(c => colors[c] || '#8b5cf6'),
+        backgroundColor: 'transparent',
+        pointBackgroundColor: classes.map(c => colors[c] || '#8b5cf6'),
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        borderWidth: 2,
+        tension: 0.3,
+        segment: {
+          borderColor: ctx => colors[ctx.p1.raw] || '#8b5cf6',
+        },
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => labelMap[ctx.parsed.y] || 'Unknown',
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 0, max: 4,
+          ticks: {
+            stepSize: 1,
+            callback: v => labelMap[v] || v,
+            font: { size: 10 },
+          },
+          grid: { color: '#f1f5f9' },
+        },
+        x: {
+          ticks: { font: { size: 10 }, maxRotation: 40 },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+})();
+{% endif %}
 </script>
 {% endblock %}

@@ -5,9 +5,27 @@
 {% block content %}
 <div class="p-6">
     <!-- Page Header -->
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">User Test Results</h1>
-        <p class="text-sm text-gray-500">View and manage all AI analysis results</p>
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Test Results</h1>
+            <p class="text-sm text-gray-500">All AI analysis results — doctors &amp; technicians</p>
+        </div>
+
+        <!-- Role filter tabs -->
+        <div class="inline-flex rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden text-sm font-medium">
+            <a href="?role="
+               class="px-4 py-2 {% if not role_filter %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+                All&nbsp;<span class="font-bold">{{ total_all }}</span>
+            </a>
+            <a href="?role=user"
+               class="px-4 py-2 border-l border-gray-200 {% if role_filter == 'user' %}bg-blue-600 text-white{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+                <span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>Doctors&nbsp;<span class="font-bold">{{ doctor_count }}</span>
+            </a>
+            <a href="?role=senior_technician"
+               class="px-4 py-2 border-l border-gray-200 {% if role_filter == 'senior_technician' %}bg-teal-600 text-white{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+                <span class="inline-block w-2 h-2 rounded-full bg-teal-400 mr-1"></span>Technicians&nbsp;<span class="font-bold">{{ technician_count }}</span>
+            </a>
+        </div>
     </div>
 
     <!-- Stats -->
@@ -120,6 +138,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tested By</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Result</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Checkups</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -130,11 +149,24 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {{ item.analysis.created_at|date:"M d, Y H:i" }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td class="px-6 py-4 whitespace-nowrap">
                                 {% if item.analysis.created_by %}
-                                    {{ item.analysis.created_by.profile.full_name }}
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">{{ item.analysis.created_by.get_full_name|default:item.analysis.created_by.username }}</p>
+                                    <p class="text-xs text-gray-500">@{{ item.analysis.created_by.username }}</p>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-1
+                                        {% if item.analysis.created_by.profile.role == 'user' %}bg-blue-100 text-blue-700
+                                        {% elif item.analysis.created_by.profile.role == 'senior_technician' %}bg-purple-100 text-purple-700
+                                        {% elif item.analysis.created_by.profile.role == 'admin' %}bg-gray-100 text-gray-700
+                                        {% else %}bg-green-100 text-green-700{% endif %}">
+                                        {% if item.analysis.created_by.profile.role == 'user' %}Doctor
+                                        {% elif item.analysis.created_by.profile.role == 'senior_technician' %}Senior Technician
+                                        {% elif item.analysis.created_by.profile.role == 'admin' %}Admin
+                                        {% else %}{{ item.analysis.created_by.profile.role|title }}{% endif %}
+                                    </span>
+                                </div>
                                 {% else %}
-                                    <span class="text-gray-400">Unknown</span>
+                                <span class="text-gray-400">Unknown</span>
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -147,6 +179,17 @@
                                     {{ item.analysis.predicted_label }}
                                 </span>
                             </td>
+                            <td class="px-6 py-4">
+                                {% if item.analysis.recommended_checkups %}
+                                <div class="flex flex-wrap gap-1.5 max-w-xs">
+                                    {% for checkup in item.analysis.recommended_checkups %}
+                                    <span class="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700">{{ checkup }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span class="text-xs text-gray-400">None</span>
+                                {% endif %}
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {{ item.confidence_pct }}%
                             </td>
@@ -156,7 +199,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
+                            <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">
                                 No test results found
                             </td>
                         </tr>

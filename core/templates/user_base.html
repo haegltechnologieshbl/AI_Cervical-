@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>">
   <title>{% block title %}CerviStage AI{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -59,22 +60,20 @@
         <!-- Logo and Brand -->
         <div class="flex items-center">
           <a href="{% url 'home' %}" class="flex items-center space-x-3">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-2">
-              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-              </svg>
-            </div>
-            <div>
-              <span class="font-bold text-gray-900 text-lg">CerviStage AI</span>
-              <span class="text-xs text-gray-400 block -mt-1">Cervical Cancer Detection</span>
-            </div>
+
+              <img
+    src="{% static 'img/logo.png' %}"
+    alt="CerviStage AI Logo"
+    class="w-32 h-auto object-contain"
+> 
           </a>
         </div>
 
         <!-- Desktop Navigation -->
         <div class="hidden md:flex items-center space-x-1">
           {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
-          <!-- Regular User Navigation -->
+          <!-- Doctor/Admin Navigation (NOT for patients) -->
+          {% if request.user.profile.role != 'patient' %}
           <a href="{% url 'analyze-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Analyze
           </a>
@@ -84,10 +83,15 @@
           <a href="{% url 'dashboard-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Dashboard
           </a>
-
           <a href="{% url 'history-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             History
           </a>
+          {% else %}
+          <!-- Patient Navigation -->
+          <a href="{% url 'patient-dashboard' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'patient-dashboard' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            My Results
+          </a>
+          {% endif %}
           {% endif %}
         </div>
 
@@ -100,7 +104,19 @@
               <div class="h-8 w-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
                 <span class="text-white font-medium text-sm">{{ request.user.username|first|upper }}</span>
               </div>
-              <span class="hidden sm:inline text-sm font-medium">{{ request.user.get_full_name|default:request.user.username }}</span>
+              <div class="hidden sm:flex flex-col items-start leading-tight">
+                <span class="text-sm font-medium text-gray-800">{{ request.user.get_full_name|default:request.user.username }}</span>
+                <span class="text-xs font-semibold px-1.5 py-0.5 rounded
+                  {% if request.user.profile.role == 'admin' %}bg-purple-100 text-purple-700
+                  {% elif request.user.profile.role == 'senior_technician' %}bg-teal-100 text-teal-700
+                  {% elif request.user.profile.role == 'patient' %}bg-green-100 text-green-700
+                  {% else %}bg-blue-100 text-blue-700{% endif %}">
+                  {% if request.user.profile.role == 'admin' %}Admin
+                  {% elif request.user.profile.role == 'senior_technician' %}Sr. Technician
+                  {% elif request.user.profile.role == 'patient' %}Patient
+                  {% else %}Doctor{% endif %}
+                </span>
+              </div>
               <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
               </svg>
@@ -111,6 +127,16 @@
               <div class="px-4 py-2 border-b border-gray-100">
                 <p class="text-sm font-medium text-gray-900">{{ request.user.get_full_name|default:request.user.username }}</p>
                 <p class="text-xs text-gray-500">{{ request.user.email }}</p>
+                <span class="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full
+                  {% if request.user.profile.role == 'admin' %}bg-purple-100 text-purple-700
+                  {% elif request.user.profile.role == 'senior_technician' %}bg-teal-100 text-teal-700
+                  {% elif request.user.profile.role == 'patient' %}bg-green-100 text-green-700
+                  {% else %}bg-blue-100 text-blue-700{% endif %}">
+                  {% if request.user.profile.role == 'admin' %}Administrator
+                  {% elif request.user.profile.role == 'senior_technician' %}Senior Technician
+                  {% elif request.user.profile.role == 'patient' %}Patient
+                  {% else %}Doctor{% endif %}
+                </span>
               </div>
               <a href="{% url 'user-profile-page' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Profile</a>
               <button onclick="logout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</button>
@@ -141,7 +167,8 @@
     <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-200">
       <div class="px-2 pt-2 pb-3 space-y-1">
         {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
-        <!-- Regular User Mobile Navigation -->
+        <!-- Doctor/Admin Mobile Navigation (NOT for patients) -->
+        {% if request.user.profile.role != 'patient' %}
         <a href="{% url 'analyze-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Analyze
         </a>
@@ -154,6 +181,12 @@
         <a href="{% url 'history-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'history-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           History
         </a>
+        {% else %}
+        <!-- Patient Mobile Navigation -->
+        <a href="{% url 'patient-dashboard' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'patient-dashboard' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          My Results
+        </a>
+        {% endif %}
         {% endif %}
       </div>
     </div>

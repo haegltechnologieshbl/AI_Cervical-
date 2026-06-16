@@ -1,18 +1,20 @@
 """
-Ultra-fast inference service for VPS deployment.
-Key optimizations for slow VPS servers:
-- Aggressive image downsampling BEFORE loading
-- Fast processing pipeline
-- Minimal memory usage
-- Batch processing with parallel workers
+Optimised inference service for VPS/server deployment.
+Key speedups vs original:
+- True ONNX batch inference (N images → one session.run call)
+- Parallel image preprocessing via ThreadPoolExecutor
+- Removed unnecessary session lock (ONNX Runtime is thread-safe)
+- Model warm-up on load (avoids slow first request)
+- Input name cached at load time
+- Thread count tuned to available cores
 """
 
-import base64
 import io
 import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -21,9 +23,7 @@ from PIL import Image, ImageFile
 
 import onnxruntime as ort
 
-# Allow loading of truncated images
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-ImageFile.MAXBLOCK = 2**25  # Handle large images
 
 CLASS_NAMES = {
     0: "Normal - NILM",
@@ -42,11 +42,11 @@ STAGE_LABELS = {
 }
 
 RISK_LEVELS = {
-    0: {"level": "No Risk", "color": "#22c55e", "icon": "shield-check"},
-    1: {"level": "Low Risk", "color": "#84cc16", "icon": "info"},
-    2: {"level": "Moderate Risk", "color": "#eab308", "icon": "alert-triangle"},
-    3: {"level": "High Risk", "color": "#f97316", "icon": "alert-circle"},
-    4: {"level": "Critical Risk", "color": "#ef4444", "icon": "alert-octagon"},
+    0: {"level": "No Risk",       "color": "#22c55e"},
+    1: {"level": "Low Risk",      "color": "#84cc16"},
+    2: {"level": "Moderate Risk", "color": "#eab308"},
+    3: {"level": "High Risk",     "color": "#f97316"},
+    4: {"level": "Critical Risk", "color": "#ef4444"},
 }
 
 RECOMMENDATIONS = {
@@ -58,44 +58,53 @@ RECOMMENDATIONS = {
 }
 
 CLINICAL_EXPLANATIONS = {
-    "Normal - NILM": (
-        "No epithelial abnormality detected. The cells appear morphologically normal with "
-        "no signs of dysplasia or malignancy."
-    ),
-    "Atypical Squamous Cells (ASC-US)": (
-        "Atypical squamous cells are present, but the changes are unclear. This may represent "
-        "benign reactive changes or early precancerous changes."
-    ),
-    "Low-Grade Squamous Intraepithelial Lesion (LSIL)": (
-        "Low-grade precancerous changes detected. LSIL represents mild dysplasia with early abnormal "
-        "cell changes, often associated with HPV infection."
-    ),
-    "High-Grade Squamous Intraepithelial Lesion (HSIL)": (
-        "High-grade precancerous changes detected. HSIL represents moderate to severe dysplasia. "
-        "IMPORTANT: HSIL is precancerous and treatable — it is NOT invasive cancer."
-    ),
-    "Carcinoma": (
-        "Features consistent with invasive carcinoma identified. This indicates that abnormal cells "
-        "may have invaded through the basement membrane."
-    ),
+    "Normal - NILM": "No epithelial abnormality detected. Cells appear morphologically normal with no signs of dysplasia or malignancy.",
+    "Atypical Squamous Cells (ASC-US)": "Atypical squamous cells present with unclear significance. May represent benign reactive changes or early precancerous changes.",
+    "Low-Grade Squamous Intraepithelial Lesion (LSIL)": "Low-grade precancerous changes detected. LSIL represents mild dysplasia often associated with HPV infection.",
+    "High-Grade Squamous Intraepithelial Lesion (HSIL)": "High-grade precancerous changes detected. HSIL is precancerous and treatable — it is NOT invasive cancer.",
+    "Carcinoma": "Features consistent with invasive carcinoma identified. Immediate specialist referral required.",
 }
 
 IMAGE_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-IMAGE_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+IMAGE_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 MODEL_INPUT_SIZE = 224
+
+# Normalised mean/std in CHW layout for fast vectorised normalisation
+_MEAN_CHW = IMAGE_MEAN[:, None, None]
+_STD_CHW  = IMAGE_STD[:, None, None]
+
+
+def _preprocess_one(image_file) -> np.ndarray:
+    """
+    Load and preprocess a single image → float32 CHW tensor, no batch dim.
+    Staged downsampling keeps memory low on large inputs.
+    """
+    img = Image.open(image_file)
+    w, h = img.size
+    max_dim = max(w, h)
+
+    if max_dim > 2048:
+        scale = 2048 / max_dim
+        img = img.resize((int(w * scale), int(h * scale)), Image.NEAREST)
+
+    img = img.convert("RGB").resize((MODEL_INPUT_SIZE, MODEL_INPUT_SIZE), Image.BILINEAR)
+    arr = np.asarray(img, dtype=np.float32) / 255.0          # HWC
+    arr = arr.transpose(2, 0, 1)                              # CHW
+    arr = (arr - _MEAN_CHW) / _STD_CHW
+    return arr                                                 # (3, 224, 224)
 
 
 class VPSInferenceService:
-    """Ultra-fast inference service optimized for VPS servers."""
+    """Optimised inference service — singleton, thread-safe."""
 
     _instance: Optional["VPSInferenceService"] = None
     _lock = threading.Lock()
 
     def __init__(self):
         self.session: Optional[ort.InferenceSession] = None
+        self.input_name: str = "input"
         self.temperature: float = 1.0
-        self.use_gpu: bool = False
-        self._session_lock = threading.Lock()
+        self._n_workers: int = max(2, (os.cpu_count() or 2))
 
     @classmethod
     def get(cls) -> "VPSInferenceService":
@@ -110,233 +119,136 @@ class VPSInferenceService:
         from django.conf import settings
 
         model_path = Path(settings.MODEL_DIR) / "cervistage_net.onnx"
-        temp_path = Path(settings.MODEL_DIR) / "temperature.json"
+        temp_path  = Path(settings.MODEL_DIR) / "temperature.json"
 
-        print(f"[VPS FAST] Loading model from: {model_path}")
-
+        print(f"[VPS] Loading model: {model_path}")
         if not model_path.exists():
-            print(f"[ERROR] Model not found at {model_path}")
+            print(f"[ERROR] Model not found: {model_path}")
             return
 
         try:
-            # Optimized for VPS (low CPU, no GPU)
-            session_options = ort.SessionOptions()
-            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL  # Better for single-core
-            session_options.intra_op_num_threads = 2  # Reduce for VPS
-            session_options.inter_op_num_threads = 1
-
-            providers = ['CPUExecutionProvider']
-            print(f"[VPS FAST] Using CPU-only inference")
+            opts = ort.SessionOptions()
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            # Use all available cores for intra-op parallelism
+            n_cores = os.cpu_count() or 2
+            opts.intra_op_num_threads = n_cores
+            opts.inter_op_num_threads = max(1, n_cores // 2)
 
             self.session = ort.InferenceSession(
                 str(model_path),
-                sess_options=session_options,
-                providers=providers
+                sess_options=opts,
+                providers=["CPUExecutionProvider"],
             )
-            print(f"[SUCCESS] VPS-optimized model loaded")
+            # Cache input name
+            self.input_name = self.session.get_inputs()[0].name
+            print(f"[VPS] Model loaded. Input: '{self.input_name}', workers: {self._n_workers}")
+
+            # Warm-up — eliminates slow first-request JIT compilation
+            dummy = np.zeros((1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE), dtype=np.float32)
+            self.session.run(None, {self.input_name: dummy})
+            print("[VPS] Warm-up done.")
 
         except Exception as e:
             print(f"[ERROR] Failed to load model: {e}")
+            return
 
-        # Load temperature scaling
         if temp_path.exists():
             try:
                 with open(temp_path) as f:
                     self.temperature = float(json.load(f)["temperature"])
-                print(f"[SUCCESS] Temperature loaded: T={self.temperature:.4f}")
-            except:
+                print(f"[VPS] Temperature: T={self.temperature:.4f}")
+            except Exception:
                 self.temperature = 1.0
 
-    def _load_and_resize_fast(self, image_file) -> np.ndarray:
-        """
-        ULTRA-FAST image loading with aggressive downsampling.
-        This is the KEY optimization for VPS.
-        """
-        # Load image with PIL
-        img = Image.open(image_file)
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
-        # Check if we need aggressive downscaling
-        width, height = img.size
-        max_dim = max(width, height)
-
-        # If very large, downscale in stages (faster than one big resize)
-        if max_dim > 4096:
-            # First stage: downscale to 4096
-            scale = 4096 / max_dim
-            new_width = int(width * scale)
-            new_height = int(height * scale)
-            img = img.resize((new_width, new_height), Image.NEAREST)
-            width, height = new_width, new_height
-            max_dim = max(width, height)
-
-        if max_dim > 2048:
-            # Second stage: downscale to 2048
-            scale = 2048 / max_dim
-            new_width = int(width * scale)
-            new_height = int(height * scale)
-            img = img.resize((new_width, new_height), Image.NEAREST)
-
-        # Final resize to model input size
-        img = img.resize((MODEL_INPUT_SIZE, MODEL_INPUT_SIZE), Image.BILINEAR)
-
-        # Convert to array and normalize
-        img = img.convert("RGB")
-        arr = np.array(img, dtype=np.float32) / 255.0
-        arr = (arr - IMAGE_MEAN) / IMAGE_STD
-        return arr.transpose(2, 0, 1)[np.newaxis]
-
-    def preprocess_single(self, image_file) -> np.ndarray:
-        """Fast preprocessing for single image."""
-        return self._load_and_resize_fast(image_file)
-
-    def predict(self, image_file, skip_heatmap=True) -> Dict:
-        """Single image prediction (no heatmap for speed)."""
+    def predict(self, image_file) -> Dict:
+        """Single-image prediction."""
         if self.session is None:
-            raise RuntimeError("Model not loaded")
+            raise RuntimeError("Model not loaded. Copy cervistage_net.onnx to models/.")
 
-        start_time = time.time()
-        arr = self.preprocess_single(image_file)
-
-        with self._session_lock:
-            logits = self.session.run(None, {"input": arr})[0][0]
-
-        # Apply temperature scaling
-        scaled_logits = logits / self.temperature
-        exp = np.exp(scaled_logits - scaled_logits.max())
-        probs = exp / exp.sum()
-        predicted_class = int(probs.argmax())
-        label = CLASS_NAMES[predicted_class]
-
-        # Calculate uncertainty
-        entropy = -np.sum(probs * np.log(probs + 1e-8))
-        uncertainty = float(entropy / np.log(5))
-
-        # Determine confidence level
-        if uncertainty < 0.2:
-            confidence_level = "High"
-        elif uncertainty < 0.4:
-            confidence_level = "Moderate"
-        else:
-            confidence_level = "Low"
-
-        risk = RISK_LEVELS[predicted_class]
-        confidence_interp = self._get_confidence_interpretation(
-            round(float(probs.max()), 4),
-            round(uncertainty, 4)
-        )
-
-        elapsed = time.time() - start_time
-        print(f"[VPS FAST] Single prediction: {elapsed:.3f}s")
-
-        return {
-            "predicted_class": predicted_class,
-            "predicted_label": label,
-            "stage_label": STAGE_LABELS[predicted_class],
-            "probabilities": {CLASS_NAMES[i]: round(float(p), 4) for i, p in enumerate(probs)},
-            "confidence": round(float(probs.max()), 4),
-            "uncertainty": round(uncertainty, 4),
-            "confidence_level": confidence_level,
-            "risk_level": risk["level"],
-            "risk_color": risk["color"],
-            "confidence_interpretation": confidence_interp,
-            "recommendation": RECOMMENDATIONS.get(label, "Consult with a healthcare provider."),
-            "explanation": CLINICAL_EXPLANATIONS.get(label, "Detailed clinical explanation not available."),
-            "inference_time": elapsed
-        }
+        t0 = time.time()
+        arr = _preprocess_one(image_file)[np.newaxis]          # (1, 3, 224, 224)
+        logits = self.session.run(None, {self.input_name: arr})[0][0]
+        result = self._logits_to_result(logits)
+        result["inference_time"] = round(time.time() - t0, 3)
+        print(f"[VPS] Single predict: {result['inference_time']:.3f}s")
+        return result
 
     def predict_batch(self, image_files: List) -> List[Dict]:
-        """Batch prediction for multiple images."""
+        """
+        Batch prediction — ONE ONNX session.run() call for all images.
+        Images are preprocessed in parallel, then stacked into a single
+        tensor before inference.
+        """
         if self.session is None:
-            raise RuntimeError("Model not loaded")
-
+            raise RuntimeError("Model not loaded.")
         if not image_files:
             return []
 
-        start_time = time.time()
-        print(f"[VPS FAST] Processing batch of {len(image_files)} images")
+        n = len(image_files)
+        t0 = time.time()
+        print(f"[VPS] Batch of {n} images")
 
-        # Process all images
-        predictions = []
-        for i, image_file in enumerate(image_files):
+        # ── Step 1: parallel preprocessing ──────────────────────────
+        tensors: List[Optional[np.ndarray]] = [None] * n
+
+        def _do_preprocess(idx, f):
             try:
-                pred = self.predict(image_file, skip_heatmap=True)
-                predictions.append(pred)
-                print(f"[VPS FAST] Processed {i+1}/{len(image_files)}")
+                return idx, _preprocess_one(f)
             except Exception as e:
-                print(f"[ERROR] Failed to process image {i+1}: {e}")
-                predictions.append(None)
+                print(f"[WARN] Preprocess failed for image {idx}: {e}")
+                return idx, None
 
-        elapsed = time.time() - start_time
-        print(f"[VPS FAST] Batch complete: {elapsed:.3f}s total ({elapsed/len(image_files):.3f}s per image)")
+        workers = min(self._n_workers, n)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_do_preprocess, i, f): i for i, f in enumerate(image_files)}
+            for fut in as_completed(futures):
+                idx, arr = fut.result()
+                tensors[idx] = arr
 
-        return predictions
+        # Separate valid from failed
+        valid_indices = [i for i, t in enumerate(tensors) if t is not None]
+        if not valid_indices:
+            return [None] * n
 
-    def _get_confidence_interpretation(self, confidence: float, uncertainty: float) -> Dict:
-        """Interpret model confidence for clinical use."""
-        if confidence >= 0.80 and uncertainty < 0.3:
-            return {
-                "level": "HIGH_CONFIDENCE",
-                "message": "High Confidence Finding",
-                "action": "Standard clinical protocol may be followed",
-                "review_required": False,
-                "color": "#10b981",
-                "icon": "check-circle"
-            }
-        elif 0.60 <= confidence < 0.80 or uncertainty < 0.5:
-            return {
-                "level": "MODERATE_CONFIDENCE",
-                "message": "Moderate Confidence - Review Recommended",
-                "action": "Pathologist review recommended before clinical decisions",
-                "review_required": True,
-                "color": "#f59e0b",
-                "icon": "exclamation-triangle"
-            }
-        else:
-            return {
-                "level": "LOW_CONFIDENCE",
-                "message": "Low Confidence - Pathologist Review Required",
-                "action": "MANDATORY: Pathologist review required before clinical decisions",
-                "review_required": True,
-                "color": "#ef4444",
-                "icon": "alert-circle"
-            }
+        # ── Step 2: single batched ONNX inference ────────────────────
+        batch = np.stack([tensors[i] for i in valid_indices], axis=0)  # (K, 3, 224, 224)
+        t_infer = time.time()
+        logits_batch = self.session.run(None, {self.input_name: batch})[0]  # (K, 5)
+        print(f"[VPS] ONNX inference ({len(valid_indices)} imgs): {time.time()-t_infer:.3f}s")
 
-    def average_predictions(self, predictions_list: list) -> Dict:
-        """Average predictions from multiple images."""
-        if not predictions_list:
-            raise ValueError("At least one prediction is required")
+        # ── Step 3: decode results ────────────────────────────────────
+        results: List[Optional[Dict]] = [None] * n
+        for out_idx, img_idx in enumerate(valid_indices):
+            results[img_idx] = self._logits_to_result(logits_batch[out_idx])
 
-        num_images = len(predictions_list)
+        print(f"[VPS] Batch total: {time.time()-t0:.3f}s ({(time.time()-t0)/n:.3f}s/img)")
+        return results
+
+    def average_predictions(self, predictions_list: List[Dict]) -> Dict:
+        """Average probabilities across a list of per-image results."""
+        valid = [p for p in predictions_list if p is not None]
+        if not valid:
+            raise ValueError("No valid predictions to average.")
+
         avg_probs = np.zeros(5, dtype=np.float32)
-
-        for pred in predictions_list:
-            if pred is None:
-                continue
-            probs_dict = pred["probabilities"]
-            for class_idx in range(5):
-                class_name = CLASS_NAMES[class_idx]
-                prob_value = probs_dict.get(class_name, 0.0)
-                avg_probs[class_idx] += prob_value
-
-        avg_probs = avg_probs / num_images
+        for pred in valid:
+            for i in range(5):
+                avg_probs[i] += pred["probabilities"].get(CLASS_NAMES[i], 0.0)
+        avg_probs /= len(valid)
 
         predicted_class = int(avg_probs.argmax())
         label = CLASS_NAMES[predicted_class]
-
         avg_confidence = float(avg_probs.max())
         entropy = -np.sum(avg_probs * np.log(avg_probs + 1e-8))
         avg_uncertainty = float(entropy / np.log(5))
 
-        if avg_uncertainty < 0.2:
-            confidence_level = "High"
-        elif avg_uncertainty < 0.4:
-            confidence_level = "Moderate"
-        else:
-            confidence_level = "Low"
-
+        confidence_level = "High" if avg_uncertainty < 0.2 else "Moderate" if avg_uncertainty < 0.4 else "Low"
         risk = RISK_LEVELS[predicted_class]
-        confidence_interp = self._get_confidence_interpretation(avg_confidence, avg_uncertainty)
 
         return {
             "predicted_class": predicted_class,
@@ -348,7 +260,64 @@ class VPSInferenceService:
             "confidence_level": confidence_level,
             "risk_level": risk["level"],
             "risk_color": risk["color"],
-            "confidence_interpretation": confidence_interp,
+            "confidence_interpretation": self._get_confidence_interpretation(avg_confidence, avg_uncertainty),
             "recommendation": RECOMMENDATIONS.get(label, "Consult with a healthcare provider."),
-            "explanation": CLINICAL_EXPLANATIONS.get(label, "Detailed clinical explanation not available."),
+            "explanation": CLINICAL_EXPLANATIONS.get(label, ""),
         }
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _logits_to_result(self, logits: np.ndarray) -> Dict:
+        scaled = logits / self.temperature
+        exp = np.exp(scaled - scaled.max())
+        probs = exp / exp.sum()
+        predicted_class = int(probs.argmax())
+        label = CLASS_NAMES[predicted_class]
+
+        entropy = -np.sum(probs * np.log(probs + 1e-8))
+        uncertainty = float(entropy / np.log(5))
+        confidence_level = "High" if uncertainty < 0.2 else "Moderate" if uncertainty < 0.4 else "Low"
+        risk = RISK_LEVELS[predicted_class]
+
+        return {
+            "predicted_class": predicted_class,
+            "predicted_label": label,
+            "stage_label": STAGE_LABELS[predicted_class],
+            "probabilities": {CLASS_NAMES[i]: round(float(p), 4) for i, p in enumerate(probs)},
+            "confidence": round(float(probs.max()), 4),
+            "uncertainty": round(uncertainty, 4),
+            "confidence_level": confidence_level,
+            "risk_level": risk["level"],
+            "risk_color": risk["color"],
+            "confidence_interpretation": self._get_confidence_interpretation(float(probs.max()), uncertainty),
+            "recommendation": RECOMMENDATIONS.get(label, "Consult with a healthcare provider."),
+            "explanation": CLINICAL_EXPLANATIONS.get(label, ""),
+        }
+
+    def _get_confidence_interpretation(self, confidence: float, uncertainty: float) -> Dict:
+        if confidence >= 0.80 and uncertainty < 0.3:
+            return {
+                "level": "HIGH_CONFIDENCE",
+                "message": "High Confidence Finding",
+                "action": "Standard clinical protocol may be followed",
+                "review_required": False,
+                "color": "#10b981",
+            }
+        elif confidence >= 0.60 or uncertainty < 0.5:
+            return {
+                "level": "MODERATE_CONFIDENCE",
+                "message": "Moderate Confidence — Review Recommended",
+                "action": "Pathologist review recommended before clinical decisions",
+                "review_required": True,
+                "color": "#f59e0b",
+            }
+        else:
+            return {
+                "level": "LOW_CONFIDENCE",
+                "message": "Low Confidence — Pathologist Review Required",
+                "action": "MANDATORY: Pathologist review required before clinical decisions",
+                "review_required": True,
+                "color": "#ef4444",
+            }

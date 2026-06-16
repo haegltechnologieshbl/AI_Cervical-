@@ -21,9 +21,43 @@
         </div>
     </div>
 
+    <!-- Django Messages -->
+    {% if messages %}
+    <div class="mb-4 space-y-2">
+        {% for message in messages %}
+        <div class="rounded-md p-4 {% if message.tags == 'success' %}bg-green-50{% elif message.tags == 'warning' %}bg-yellow-50{% else %}bg-red-50{% endif %}">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    {% if message.tags == 'success' %}
+                    <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    {% elif message.tags == 'warning' %}
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {% else %}
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium {% if message.tags == 'success' %}text-green-800{% elif message.tags == 'warning' %}text-yellow-800{% else %}text-red-800{% endif %}">
+                        {{ message }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <!-- Form -->
     <div class="bg-white shadow rounded-lg">
         <form id="addPatientForm" method="post" action="{% if patient %}{% url 'edit-patient' patient.patient_id %}{% else %}{% url 'add-patient' %}{% endif %}" class="p-6 space-y-6">
+            {% csrf_token %}
+
             <!-- Basic Information -->
             <div>
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
@@ -76,10 +110,43 @@
                     </div>
 
                     <div>
-                        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email (for login)</label>
                         <input type="email" id="email" name="email"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="patient@example.com" value="{% if patient %}{{ patient.email }}{% endif %}">
+                            placeholder="patient@gmail.com" value="{% if patient %}{{ patient.email }}{% endif %}">
+                        <p class="mt-1 text-xs text-gray-500">Used as username for patient login</p>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div>
+                        <label for="patient_password" class="block text-sm font-medium text-gray-700">
+                            {% if patient %}Change Password{% else %}Patient Password{% endif %}
+                        </label>
+                        <div class="relative mt-1">
+                            <input type="password" id="patient_password" name="patient_password"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm pr-10"
+                                placeholder="{% if patient %}Enter new password to change{% else %}Enter password for patient login{% endif %}">
+                            <button type="button" id="togglePassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                <svg id="eyeIcon" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                <svg id="eyeOffIcon" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            {% if patient %}
+                                {% if patient.user_account %}
+                                    <span class="text-green-600 font-medium">✓ Login account exists</span> ({{ patient.user_account.username }}). Leave empty to keep current password.
+                                {% else %}
+                                    <span class="text-yellow-600 font-medium">⚠ No login account yet.</span> Enter a password + ensure email/phone is filled to create one.
+                                {% endif %}
+                            {% else %}
+                                Leave empty to skip creating login account
+                            {% endif %}
+                        </p>
                     </div>
 
                     <div class="md:col-span-2">
@@ -132,42 +199,42 @@
                         <label for="medical_history" class="block text-sm font-medium text-gray-700">Previous Medical Conditions</label>
                         <textarea id="medical_history" name="medical_history" rows="2"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Previous surgeries, conditions, etc."></textarea>
+                            placeholder="Previous surgeries, conditions, etc.">{% if patient %}{{ patient.medical_history }}{% endif %}</textarea>
                     </div>
 
                     <div>
                         <label for="medications" class="block text-sm font-medium text-gray-700">Current Medications</label>
                         <textarea id="medications" name="medications" rows="2"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="List current medications"></textarea>
+                            placeholder="List current medications">{% if patient %}{{ patient.medications }}{% endif %}</textarea>
                     </div>
 
                     <div>
                         <label for="allergies" class="block text-sm font-medium text-gray-700">Known Allergies</label>
                         <textarea id="allergies" name="allergies" rows="2"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Known drug or food allergies"></textarea>
+                            placeholder="Known drug or food allergies">{% if patient %}{{ patient.allergies }}{% endif %}</textarea>
                     </div>
 
                     <div>
                         <label for="family_history" class="block text-sm font-medium text-gray-700">Family History</label>
                         <textarea id="family_history" name="family_history" rows="2"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Family history of relevant conditions"></textarea>
+                            placeholder="Family history of relevant conditions">{% if patient %}{{ patient.family_history }}{% endif %}</textarea>
                     </div>
 
                     <div>
                         <label for="notes" class="block text-sm font-medium text-gray-700">Additional Notes</label>
                         <textarea id="notes" name="notes" rows="2"
                             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            placeholder="Any additional notes or observations"></textarea>
+                            placeholder="Any additional notes or observations">{% if patient %}{{ patient.notes }}{% endif %}</textarea>
                     </div>
                 </div>
             </div>
 
             <!-- Action Buttons -->
             <div class="flex items-center justify-end space-x-4 pt-4 border-t border-gray-200">
-                <a href="{% url 'admin-registered-users' %}" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <a href="{% url 'admin-patients' %}" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                     Cancel
                 </a>
                 <button type="submit" id="submitBtn"
@@ -176,7 +243,7 @@
                 </button>
             </div>
 
-            <!-- Error Message -->
+            <!-- Inline Error Message -->
             <div id="errorMessage" class="hidden rounded-md bg-red-50 p-4">
                 <div class="flex">
                     <div class="flex-shrink-0">
@@ -185,28 +252,11 @@
                         </svg>
                     </div>
                     <div class="ml-3">
-                        <h3 class="text-sm font-medium text-red-800" id="errorText">
-                            Failed to add patient
-                        </h3>
+                        <h3 class="text-sm font-medium text-red-800" id="errorText">Error</h3>
                     </div>
                 </div>
             </div>
 
-            <!-- Success Message -->
-            <div id="successMessage" class="hidden rounded-md bg-green-50 p-4">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-green-800">
-                            Patient added successfully! Redirecting to patient list...
-                        </h3>
-                    </div>
-                </div>
-            </div>
         </form>
     </div>
 </div>
@@ -216,10 +266,19 @@ const addPatientForm = document.getElementById('addPatientForm');
 const submitBtn = document.getElementById('submitBtn');
 const errorMessage = document.getElementById('errorMessage');
 const errorText = document.getElementById('errorText');
-const successMessage = document.getElementById('successMessage');
 
-const isEditing = `{% if patient %}true{% else %}false{% endif %}`;
-const patientId = `{% if patient %}'{{ patient.patient_id }}'{% else %}null{% endif %}`;
+// Toggle password visibility
+const togglePassword = document.getElementById('togglePassword');
+const passwordInput = document.getElementById('patient_password');
+const eyeIcon = document.getElementById('eyeIcon');
+const eyeOffIcon = document.getElementById('eyeOffIcon');
+
+togglePassword.addEventListener('click', () => {
+    const isPassword = passwordInput.type === 'password';
+    passwordInput.type = isPassword ? 'text' : 'password';
+    eyeIcon.classList.toggle('hidden', isPassword);
+    eyeOffIcon.classList.toggle('hidden', !isPassword);
+});
 
 // Auto-calculate age from date of birth
 const dateOfBirthInput = document.getElementById('date_of_birth');
@@ -227,91 +286,41 @@ const ageInput = document.getElementById('age');
 
 function calculateAge(dob) {
     if (!dob) return '';
-
     const birthDate = new Date(dob);
     const today = new Date();
-
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-
-    // If the current month is before the birth month, or if it's the birth month
-    // but the current day is before the birth day, subtract 1 from the age
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
         age--;
     }
-
     return age >= 0 ? age : '';
 }
 
-dateOfBirthInput.addEventListener('change', function() {
-    const dob = this.value;
-    const calculatedAge = calculateAge(dob);
-    ageInput.value = calculatedAge;
+dateOfBirthInput.addEventListener('change', function () {
+    ageInput.value = calculateAge(this.value);
 });
 
-addPatientForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+// Form submit
+addPatientForm.addEventListener('submit', (e) => {
     errorMessage.classList.add('hidden');
-    successMessage.classList.add('hidden');
 
-    const formData = new FormData(addPatientForm);
-    const data = {
-        first_name: formData.get('first_name'),
-        last_name: formData.get('last_name'),
-        date_of_birth: formData.get('date_of_birth') || null,
-        age: formData.get('age') || null,
-        gender: formData.get('gender'),
-        phone: formData.get('phone') || null,
-        email: formData.get('email') || null,
-        address: formData.get('address') || null,
-        hpv_status: formData.get('hpv_status') || 'unknown',
-        last_screening_date: formData.get('last_screening_date') || null,
-        pregnancy_status: formData.get('pregnancy_status') || 'unknown',
-        medical_history: formData.get('medical_history') || null,
-        medications: formData.get('medications') || null,
-        allergies: formData.get('allergies') || null,
-        family_history: formData.get('family_history') || null,
-        notes: formData.get('notes') || null,
-    };
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const password = passwordInput.value;
 
-    submitBtn.disabled = true;
-    const loadingText = isEditing ? 'Updating patient...' : 'Adding patient...';
-    submitBtn.innerHTML = '<span class="animate-pulse">' + loadingText + '</span>';
-
-    try {
-        const url = isEditing ? `/api/v1/patients/${patientId}` : '/api/v1/patients';
-        const method = isEditing ? 'PUT' : 'POST';
-
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            credentials: 'include',
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            successMessage.querySelector('h3').textContent = isEditing
-                ? 'Patient updated successfully! Redirecting to patient list...'
-                : 'Patient added successfully! Redirecting to patient list...';
-            successMessage.classList.remove('hidden');
-            setTimeout(() => {
-                window.location.href = '/admin/registered-users/';
-            }, 1500);
-        } else {
-            throw new Error(result.error || 'Failed to save patient');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        errorText.textContent = error.message || 'Failed to save patient. Please try again.';
+    // Validate: if password given, email or phone must be present
+    if (password && !email && !phone) {
+        e.preventDefault();
+        errorText.textContent = 'Please provide an email or phone number to set a password.';
         errorMessage.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = isEditing ? 'Update Patient' : 'Register Patient';
+        window.scrollTo({ top: errorMessage.offsetTop - 20, behavior: 'smooth' });
+        return;
     }
+
+    // Show loading state and let form submit normally (POST)
+    submitBtn.disabled = true;
+    const isEditing = {% if patient %}true{% else %}false{% endif %};
+    submitBtn.innerHTML = `<span class="animate-pulse">${isEditing ? 'Updating' : 'Registering'} patient...</span>`;
 });
 </script>
 {% endblock %}

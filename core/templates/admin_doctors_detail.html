@@ -1,7 +1,7 @@
 {% extends "admin_base.html" %}
 {% block title %}Doctor Details - {{ target_user.get_full_name|default:target_user.username }} - Admin - CerviStage AI{% endblock %}
 {% block breadcrumb %}
-    <a href="{% url 'admin-users' %}" class="text-indigo-600 hover:text-indigo-900">Users</a>
+    <a href="{% url 'admin-doctors' %}" class="text-indigo-600 hover:text-indigo-900">Doctors</a>
     <span class="text-slate-600">/</span>
     <span class="text-slate-600">{{ target_user.get_full_name|default:target_user.username }}</span>
 {% endblock %}
@@ -15,11 +15,11 @@
                 <h1 class="text-2xl font-bold text-slate-900">{{ target_user.get_full_name|default:target_user.username }}</h1>
                 <p class="text-sm text-slate-500">@{{ target_user.username }} • {{ target_user.profile.role|title }}</p>
             </div>
-            <a href="{% url 'admin-users' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+            <a href="{% url 'admin-doctors' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                 </svg>
-                Back to Users
+                Back to Doctors
             </a>
         </div>
     </div>
@@ -97,7 +97,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                         <div class="bg-blue-50 rounded-lg p-4">
                             <div class="text-2xl font-bold text-blue-900">{{ total_patients }}</div>
-                            <div class="text-sm text-blue-700">Patients Registered</div>
+                            <div class="text-sm text-blue-700">Patients Tested</div>
                         </div>
                         <div class="bg-green-50 rounded-lg p-4">
                             <div class="text-2xl font-bold text-green-900">{{ total_analyses }}</div>
@@ -135,10 +135,10 @@
         </div>
     </div>
 
-    <!-- Recent Patients -->
+    <!-- Recent Patients Tested -->
     <div class="bg-white shadow rounded-lg mb-8">
         <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Patients</h3>
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Patients Tested</h3>
             
             {% if patients %}
             <div class="overflow-x-auto">
@@ -182,9 +182,10 @@
             </div>
             {% else %}
             <div class="text-center py-8">
-                <p class="text-gray-500">No patients registered yet.</p>
+                <p class="text-gray-500">No patients tested yet.</p>
             </div>
             {% endif %}
+            {% include 'includes/pagination.html' with page_obj=patients %}
         </div>
     </div>
 </div>

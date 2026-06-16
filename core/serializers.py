@@ -11,38 +11,16 @@ class PatientSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     age_calculated = serializers.SerializerMethodField()
     analyses_count = serializers.SerializerMethodField()
-    latest_figo_stage = serializers.CharField(source='current_figo_stage', read_only=True)
 
     class Meta:
         model = Patient
         fields = [
-            # Existing fields
             'patient_id', 'first_name', 'last_name', 'full_name',
             'date_of_birth', 'age', 'age_calculated', 'gender',
             'phone', 'email', 'address',
             'hpv_status', 'last_screening_date', 'pregnancy_status',
             'medical_history', 'medications', 'allergies', 'family_history',
             'notes', 'created_at', 'updated_at', 'analyses_count', 'created_by',
-
-            # New personal fields
-            'marital_status', 'occupation', 'education_level', 'blood_group',
-
-            # New contact fields
-            'alternate_contact', 'district', 'state', 'pin_code',
-
-            # New identification fields
-            'aadhaar_number', 'abha_health_id', 'medical_record_number',
-
-            # New emergency fields
-            'emergency_contact_name', 'emergency_contact_relationship',
-            'emergency_contact_number',
-
-            # New consent fields
-            'consent_screening', 'consent_image_capture', 'consent_ai_analysis',
-            'digital_signature',
-
-            # New medical fields
-            'current_figo_stage', 'latest_figo_stage',
         ]
         read_only_fields = ['patient_id', 'created_at', 'updated_at', 'created_by']
 
@@ -54,22 +32,6 @@ class PatientSerializer(serializers.ModelSerializer):
 
     def get_analyses_count(self, obj):
         return obj.analyses.count()
-
-    def validate_aadhaar_number(self, value):
-        """Validate Aadhaar number format (12 digits)"""
-        if value:
-            value = str(value).strip()
-            if not re.match(r'^\d{12}$', value):
-                raise serializers.ValidationError("Aadhaar number must be 12 digits")
-        return value
-
-    def validate_pin_code(self, value):
-        """Validate PIN code format (6 digits)"""
-        if value:
-            value = str(value).strip()
-            if not re.match(r'^\d{6}$', value):
-                raise serializers.ValidationError("PIN code must be 6 digits")
-        return value
 
 
 class PatientListSerializer(serializers.ModelSerializer):
@@ -83,7 +45,6 @@ class PatientListSerializer(serializers.ModelSerializer):
         fields = [
             'patient_id', 'full_name', 'age', 'gender',
             'phone', 'hpv_status', 'analyses_count', 'last_analysis_date',
-            'marital_status', 'district', 'current_figo_stage'
         ]
 
     def get_full_name(self, obj):

@@ -94,6 +94,7 @@
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Date</th>
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Patient</th>
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Result</th>
+            <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Checkups</th>
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Confidence</th>
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">AI Level</th>
             <th class="text-left px-6 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Actions</th>
@@ -129,6 +130,17 @@
                 </span>
                 {% endif %}
               </div>
+            </td>
+            <td class="px-6 py-4">
+              {% if a.recommended_checkups %}
+              <div class="flex flex-wrap gap-1.5 max-w-xs">
+                {% for checkup in a.recommended_checkups %}
+                <span class="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700">{{ checkup }}</span>
+                {% endfor %}
+              </div>
+              {% else %}
+              <span class="text-gray-400 text-xs">None</span>
+              {% endif %}
             </td>
             <td class="px-6 py-4 text-gray-600">{% widthratio a.confidence 1 100 %}%</td>
             <td class="px-6 py-4">

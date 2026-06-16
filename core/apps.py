@@ -6,6 +6,7 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        # Load the ONNX model once at startup
         from services.inference import InferenceService
+        from services.inference_vps import VPSInferenceService
         InferenceService.get()
+        VPSInferenceService.get()

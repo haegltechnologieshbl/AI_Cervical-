@@ -9,7 +9,9 @@ class UserProfile(models.Model):
     """Extended user profile with role and additional fields"""
     ROLE_CHOICES = [
         ('admin', 'Administrator'),
-        ('user', 'User'),
+        ('senior_technician', 'Senior Technician'),
+        ('user', 'Doctor/User'),
+        ('patient', 'Patient'),
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -64,6 +66,7 @@ class Patient(models.Model):
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
     phone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
+    user_account = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='patient_record', help_text="Linked user account for patient login")
     address = models.TextField(blank=True, null=True)
 
     # Medical Information
@@ -79,81 +82,6 @@ class Patient(models.Model):
 
     # Additional Notes
     notes = models.TextField(blank=True, null=True, help_text="Additional notes or observations")
-
-    # ========== HOSPITAL MANAGEMENT ENHANCEMENT FIELDS ==========
-
-    # Personal Information Extensions
-    marital_status = models.CharField(max_length=20, choices=[
-        ('single', 'Single'),
-        ('married', 'Married'),
-        ('widowed', 'Widowed'),
-        ('divorced', 'Divorced'),
-        ('separated', 'Separated')
-    ], null=True, blank=True, help_text="Patient's marital status")
-
-    occupation = models.CharField(max_length=100, null=True, blank=True, help_text="Patient's occupation")
-
-    education_level = models.CharField(max_length=50, choices=[
-        ('none', 'None'),
-        ('primary', 'Primary'),
-        ('secondary', 'Secondary'),
-        ('graduate', 'Graduate'),
-        ('post_graduate', 'Post Graduate')
-    ], null=True, blank=True, help_text="Patient's highest education level")
-
-    blood_group = models.CharField(max_length=5, choices=[
-        ('A+', 'A+'), ('A-', 'A-'),
-        ('B+', 'B+'), ('B-', 'B-'),
-        ('O+', 'O+'), ('O-', 'O-'),
-        ('AB+', 'AB+'), ('AB-', 'AB-')
-    ], null=True, blank=True, help_text="Patient's blood group")
-
-    # Enhanced Contact Information
-    alternate_contact = models.CharField(max_length=20, null=True, blank=True, help_text="Alternate contact number")
-
-    district = models.CharField(max_length=100, null=True, blank=True, help_text="District of residence")
-
-    state = models.CharField(max_length=100, null=True, blank=True, help_text="State of residence")
-
-    pin_code = models.CharField(max_length=10, null=True, blank=True, help_text="PIN/Postal code")
-
-    # Identification Details
-    aadhaar_number = models.CharField(max_length=12, null=True, blank=True, unique=True, help_text="Aadhaar number (12 digits)")
-
-    abha_health_id = models.CharField(max_length=50, null=True, blank=True, unique=True, help_text="ABHA Health ID number")
-
-    medical_record_number = models.CharField(max_length=50, null=True, blank=True, unique=True, help_text="Medical Record Number")
-
-    # Emergency Contact Information
-    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True, help_text="Emergency contact person name")
-
-    emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True, help_text="Relationship with emergency contact")
-
-    emergency_contact_number = models.CharField(max_length=20, null=True, blank=True, help_text="Emergency contact phone number")
-
-    # Consent Tracking
-    consent_screening = models.BooleanField(default=False, help_text="Consent given for screening")
-
-    consent_image_capture = models.BooleanField(default=False, help_text="Consent given for image capture")
-
-    consent_ai_analysis = models.BooleanField(default=False, help_text="Consent given for AI analysis")
-
-    digital_signature = models.TextField(null=True, blank=True, help_text="Digital signature (base64 encoded)")
-
-    # Medical Record Extensions - FIGO Staging
-    current_figo_stage = models.CharField(max_length=20, choices=[
-        ('0', 'Stage 0 - Pre-cancer'),
-        ('IA1', 'Stage IA1'),
-        ('IA2', 'Stage IA2'),
-        ('IB1', 'Stage IB1'),
-        ('IB2', 'Stage IB2'),
-        ('IIA', 'Stage IIA'),
-        ('IIB', 'Stage IIB'),
-        ('IIIA', 'Stage IIIA'),
-        ('IIIB', 'Stage IIIB'),
-        ('IVA', 'Stage IVA'),
-        ('IVB', 'Stage IVB')
-    ], null=True, blank=True, help_text="Current FIGO staging if diagnosed")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -578,6 +506,7 @@ class Analysis(models.Model):
     uncertainty = models.FloatField()
     confidence_level = models.CharField(max_length=20)
     recommendation = models.TextField()
+    recommended_checkups = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Batch metadata for multi-image analyses
@@ -592,3 +521,19 @@ class Analysis(models.Model):
 
     def __str__(self):
         return f"{self.predicted_label} — {self.analysis_id}"
+
+
+class ClinicalNote(models.Model):
+    """Clinical notes added by doctors or technicians on a patient visit."""
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='clinical_notes')
+    analysis = models.ForeignKey(Analysis, on_delete=models.SET_NULL, null=True, blank=True, related_name='clinical_notes')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='clinical_notes')
+    note = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Note by {self.created_by} on {self.patient} ({self.created_at:%Y-%m-%d})"

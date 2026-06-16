@@ -4,6 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>">
   <title>{% block title %}Admin Panel - CerviStage AI{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -119,21 +120,19 @@
 
   <div class="flex h-screen overflow-hidden">
     <!-- Enhanced Sidebar -->
-    <aside class="w-72 bg-gradient-to-b from-slate-900 to-slate-800 text-white flex-shrink-0 flex flex-col shadow-2xl">
+    <aside id="adminSidebar" class="bg-gradient-to-b from-slate-900 to-slate-800 text-white flex-shrink-0 flex flex-col shadow-2xl overflow-hidden" style="width:18rem;transition:width 0.3s ease;min-width:0">
       <!-- Logo Section -->
-      <div class="p-6 border-b border-slate-700/50">
-        <div class="flex items-center space-x-3">
-          <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl p-3 shadow-lg">
-            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-            </svg>
-          </div>
-          <div>
-            <h1 class="font-bold text-xl">CerviStage AI</h1>
-            <p class="text-xs text-slate-400">Hospital Management System</p>
-          </div>
-        </div>
-      </div>
+      {% load static %}
+
+<div class="p-1 border-b border-slate-800/100">
+    <div class="flex justify-center">
+        <img
+            src="{% static 'img/logo.png' %}"
+            alt="CerviStage AI Logo"
+            class="h-20 w-auto object-contain"
+        >
+    </div>
+</div>
 
       <!-- Quick Stats -->
       <div class="p-4 border-b border-slate-700/50">
@@ -168,18 +167,22 @@
               <i class="fas fa-tachometer-alt w-5 text-center mr-3"></i>
               Dashboard
             </a>
-             <a href="{% url 'admin-registered-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-registered-users' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+             <a href="{% url 'admin-patients' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-patients' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
               <i class="fas fa-user-plus w-5 text-center mr-3"></i>
               Patients
               {% if new_users_count > 0 %}
               <span class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ new_users_count }}</span>
               {% endif %}
             </a>
-            <a href="{% url 'admin-users' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-users' or request.resolver_match.url_name == 'admin-user-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+            <a href="{% url 'admin-doctors' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-doctors' or request.resolver_match.url_name == 'admin-user-history' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
               <i class="fas fa-user-md w-5 text-center mr-3"></i>
               Doctors List
             </a>
-           
+            <a href="{% url 'admin-technicians' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-technicians' or request.resolver_match.url_name == 'add-technician' or request.resolver_match.url_name == 'edit-technician' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-microscope w-5 text-center mr-3"></i>
+              Senior Technicians
+            </a>
+
           </div>
           
 
@@ -204,7 +207,11 @@
             <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Results</p>
             <a href="{% url 'admin-test-results' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-test-results' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
               <i class="fas fa-vial w-5 text-center mr-3"></i>
-              Doctor Tested Results
+              Test Results
+            </a>
+            <a href="{% url 'admin-test-results' %}?role=senior_technician" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800/50">
+              <i class="fas fa-microscope w-5 text-center mr-3"></i>
+              Technician Results
             </a>
           </div>
 
@@ -243,11 +250,18 @@
       <header class="bg-white shadow-sm border-b border-slate-200">
         <div class="px-6 py-4">
           <div class="flex items-center justify-between">
-            <!-- Left side - Breadcrumb & Title -->
+            <!-- Left side - Toggle + Breadcrumb -->
             <div class="flex items-center space-x-4">
-              <!-- Mobile menu button -->
-              <button type="button" class="lg:hidden text-slate-400 hover:text-slate-600">
-                <i class="fas fa-bars text-xl"></i>
+              <!-- Sidebar toggle button -->
+              <button type="button" onclick="toggleSidebar()" id="sidebarToggleBtn"
+                class="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+                title="Toggle sidebar">
+                <svg id="iconOpen" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+                <svg id="iconClose" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
               </button>
 
               <div class="hidden md:block">
@@ -344,9 +358,35 @@
     }
   }
 
+  // ── Sidebar toggle ──
+  function toggleSidebar() {
+    const sidebar = document.getElementById('adminSidebar');
+    const iconOpen = document.getElementById('iconOpen');
+    const iconClose = document.getElementById('iconClose');
+    const isCollapsed = sidebar.style.width === '0px';
+
+    if (isCollapsed) {
+      sidebar.style.width = '18rem';
+      iconOpen.classList.remove('hidden');
+      iconClose.classList.add('hidden');
+      localStorage.setItem('adminSidebarCollapsed', '0');
+    } else {
+      sidebar.style.width = '0px';
+      iconOpen.classList.add('hidden');
+      iconClose.classList.remove('hidden');
+      localStorage.setItem('adminSidebarCollapsed', '1');
+    }
+  }
+
   // Initialize
   document.addEventListener('DOMContentLoaded', () => {
     loadQuickStats();
+    if (localStorage.getItem('adminSidebarCollapsed') === '1') {
+      const sidebar = document.getElementById('adminSidebar');
+      sidebar.style.width = '0px';
+      document.getElementById('iconOpen').classList.add('hidden');
+      document.getElementById('iconClose').classList.remove('hidden');
+    }
   });
   </script>
 

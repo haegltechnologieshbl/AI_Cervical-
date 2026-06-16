@@ -1,4 +1,4 @@
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -18,7 +18,8 @@ from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     Analysis, Patient, GynecologicalHistory, ReproductiveHistory,
-    ScreeningRecord, FollowUpRecord, TreatmentRecord, Appointment, RiskAssessment
+    ScreeningRecord, FollowUpRecord, TreatmentRecord, Appointment, RiskAssessment,
+    ClinicalNote,
 )
 from .serializers import (
     AnalysisSerializer, AnalyzeRequestSerializer, PatientSerializer, PatientListSerializer,
@@ -26,6 +27,7 @@ from .serializers import (
     FollowUpRecordSerializer, TreatmentRecordSerializer, AppointmentSerializer, RiskAssessmentSerializer
 )
 from services.inference import InferenceService
+from services.inference_vps import VPSInferenceService
 from core.services import ImageValidator
 import cv2
 import numpy as np
@@ -39,6 +41,20 @@ import random
 import string
 
 User = get_user_model()
+
+RECOMMENDED_CHECKUP_OPTIONS = [
+    "Pap Smear Positive",
+    "HPV PCR Testing",
+    "Colposcopy",
+    "Histopathology (Gold Standard)",
+    "MRI only for confirmed invasive cancer",
+    "Treatment & Follow-up",
+]
+
+
+def get_selected_checkups(request):
+    selected = request.data.getlist('recommended_checkups')
+    return [item for item in selected if item in RECOMMENDED_CHECKUP_OPTIONS]
 
 # Safe print function for Windows console compatibility
 def safe_print(*args, **kwargs):
@@ -74,6 +90,35 @@ class AnalyzePageView(View):
             return redirect('/login/?next=/analyze/')
 
         return render(request, "analyze.html")
+
+
+class DemoDatasetView(View):
+    """GET /api/demo/<category>/ - List demo images for a dataset category"""
+    ALLOWED = {'hsil', 'lsil', 'moderate_dysplasia', 'carcinoma'}
+    IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
+
+    def get(self, request, category):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+
+        if category not in self.ALLOWED:
+            return JsonResponse({'error': 'Invalid category'}, status=400)
+
+        import os
+        from django.conf import settings
+
+        folder = os.path.join(settings.MEDIA_ROOT, 'demo', category)
+        images = []
+        if os.path.isdir(folder):
+            for fname in sorted(os.listdir(folder)):
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in self.IMAGE_EXTS:
+                    images.append({
+                        'name': fname,
+                        'url': f'{settings.MEDIA_URL}demo/{category}/{fname}',
+                    })
+
+        return JsonResponse({'category': category, 'images': images})
 
 
 
@@ -195,12 +240,6 @@ class LoginPageView(View):
         return render(request, "login.html")
 
 
-class RegisterPageView(View):
-    """GET /register/ - Registration page"""
-    def get(self, request):
-        return render(request, "register.html")
-
-
 class DashboardPageView(View):
     """GET /dashboard/ - User dashboard with comprehensive statistics"""
     def get(self, request):
@@ -258,13 +297,17 @@ class DashboardPageView(View):
             count=Count('analysis_id')
         ).order_by('-count'))
 
-        # Patient statistics
-        total_patients = Patient.objects.filter(created_by=request.user).count()
+        # Patient statistics — unique patients this user has tested
+        total_patients = Analysis.objects.filter(
+            created_by=request.user, patient__isnull=False
+        ).values('patient').distinct().count()
         patient_analyses = Analysis.objects.filter(created_by=request.user, patient__isnull=False).count()
 
         # Recent activity - show user's analyses
         recent_activity = Analysis.objects.filter(
             created_by=request.user
+        ).filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
         ).select_related('patient').order_by('-created_at')[:10]
 
         # Calculate percentages for disease distribution
@@ -308,6 +351,95 @@ class DashboardPageView(View):
             'recent_activity': recent_activity,
         }
         return render(request, "user_dashboard.html", context)
+
+
+class PatientDashboardView(View):
+    """GET /patient/dashboard/ - Patient-specific dashboard showing only their results"""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/patient/dashboard/')
+
+        # Only allow patients to access this dashboard
+        if request.user.profile.role != 'patient':
+            return redirect('/dashboard/')
+
+        # Get patient record linked to this user
+        try:
+            patient = request.user.patient_record
+        except Patient.DoesNotExist:
+            return redirect('/login/')
+
+        # Get only this patient's analyses
+        analyses_qs = Analysis.objects.filter(
+            patient=patient
+        ).filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+        ).select_related('created_by', 'created_by__profile').order_by('-created_at')
+
+        total_analyses = analyses_qs.count()
+        latest_analysis = analyses_qs.first() if analyses_qs else None
+        if latest_analysis:
+            latest_analysis.confidence_pct = round(latest_analysis.confidence * 100)
+
+        from django.core.paginator import Paginator
+        import json as _json
+        paginator = Paginator(analyses_qs, 10)
+        page_number = request.GET.get('page', 1)
+        analyses_page = paginator.get_page(page_number)
+
+        # Enrich page items
+        for a in analyses_page:
+            a.confidence_pct = round(a.confidence * 100)
+
+        # Build chart data from ALL analyses (not just current page)
+        all_analyses = list(analyses_qs.values('predicted_class', 'predicted_label', 'confidence', 'created_at'))
+
+        # Stage distribution counts
+        stage_counts = {}
+        for a in all_analyses:
+            lbl = a['predicted_label']
+            stage_counts[lbl] = stage_counts.get(lbl, 0) + 1
+
+        stage_labels = list(stage_counts.keys())
+        stage_data   = [stage_counts[k] for k in stage_labels]
+        stage_colors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444']
+        stage_color_map = {
+            'Normal': '#22c55e', 'Atypia': '#84cc16',
+            'LSIL': '#eab308', 'HSIL': '#f97316', 'Carcinoma': '#ef4444',
+        }
+        stage_bg = [stage_color_map.get(lbl, '#8b5cf6') for lbl in stage_labels]
+
+        # Confidence trend (last 10 for chart, oldest first)
+        trend_items = list(reversed(all_analyses[:10]))
+        trend_labels = [a['created_at'].strftime('%d %b') for a in trend_items]
+        trend_data   = [round(a['confidence'] * 100, 1) for a in trend_items]
+
+        # Recent checkups: collect from last 5 analyses that have checkups
+        recent_checkups = []
+        for a in analyses_qs.exclude(recommended_checkups=[]).values('recommended_checkups', 'created_at', 'analysis_id')[:5]:
+            for c in (a['recommended_checkups'] or []):
+                recent_checkups.append({
+                    'name': c,
+                    'date': a['created_at'].strftime('%d %b %Y'),
+                    'analysis_id': str(a['analysis_id']),
+                })
+            if len(recent_checkups) >= 8:
+                break
+
+        context = {
+            'patient': patient,
+            'analyses': analyses_page,
+            'total_analyses': total_analyses,
+            'latest_analysis': latest_analysis,
+            # chart data (JSON safe)
+            'chart_stage_labels': _json.dumps(stage_labels),
+            'chart_stage_data':   _json.dumps(stage_data),
+            'chart_stage_bg':     _json.dumps(stage_bg),
+            'chart_trend_labels': _json.dumps(trend_labels),
+            'chart_trend_data':   _json.dumps(trend_data),
+            'recent_checkups':    recent_checkups,
+        }
+        return render(request, "patient_dashboard.html", context)
 
 
 class AnalysisDetailView(View):
@@ -586,7 +718,8 @@ class HospitalDashboardStatsView(APIView):
         # Convert to dict with date strings as keys
         registrations_by_day = {}
         for item in registrations_by_day_query:
-            registrations_by_day[item['day'].strftime('%b %d')] = item['count']
+            if item['day'] is not None:
+                registrations_by_day[item['day'].strftime('%b %d')] = item['count']
 
         # Calculate registrations in last 7 days
         seven_days_ago = timezone.now() - timedelta(days=7)
@@ -612,8 +745,8 @@ class HospitalDashboardStatsView(APIView):
             'appointment_stats': {
                 'today': todays_appointments,
                 'this_week': appt_queryset.filter(
-                    scheduled_date__gte=today,
-                    scheduled_date__lte=today + timedelta(days=7)
+                    scheduled_date__date__gte=today,
+                    scheduled_date__date__lte=today + timedelta(days=7)
                 ).count(),
             },
             'follow_up_stats': {
@@ -628,14 +761,35 @@ class HospitalDashboardStatsView(APIView):
 
 
 # Rename the API detail view to avoid conflict
+@method_decorator(csrf_exempt, name='dispatch')
 class AnalysisApiDetailView(APIView):
-    """GET /v1/analyze/<analysis_id> - API endpoint for analysis details"""
+    """GET/PATCH /v1/analyze/<analysis_id> - API endpoint for analysis details"""
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+
     def get(self, request, analysis_id):
         try:
             analysis = Analysis.objects.get(pk=analysis_id)
         except Analysis.DoesNotExist:
             return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response(AnalysisSerializer(analysis).data)
+
+    def patch(self, request, analysis_id):
+        """Update recommended_checkups for an analysis after the doctor reviews the result."""
+        try:
+            analysis = Analysis.objects.get(pk=analysis_id)
+        except Analysis.DoesNotExist:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        checkups = request.data.get('recommended_checkups', [])
+        if not isinstance(checkups, list):
+            return Response({"error": "recommended_checkups must be a list"}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid = [c for c in checkups if c in RECOMMENDED_CHECKUP_OPTIONS]
+        analysis.recommended_checkups = valid
+        analysis.save(update_fields=['recommended_checkups'])
+
+        return Response({"message": "Checkups updated", "recommended_checkups": valid})
 
 
 
@@ -650,25 +804,36 @@ class PatientManagementView(View):
         user_role = request.user.profile.role
         is_admin = user_role == 'admin' or request.user.is_superuser
 
-        from django.db.models import Count
+        from django.db.models import Count, Max
 
         if is_admin:
             # Admins see all patients
             patients = Patient.objects.select_related(
                 'created_by', 'created_by__profile'
             ).annotate(
-                analyses_count=Count('analyses')
-            ).order_by('-created_at')
+                analyses_count=Count('analyses'),
+                latest_analysis=Max('analyses__created_at')
+            ).order_by('-latest_analysis', '-created_at')
+        elif user_role == 'senior_technician':
+            # Technicians see patients they registered OR have run analyses on
+            patients = Patient.objects.select_related(
+                'created_by', 'created_by__profile'
+            ).filter(
+                Q(created_by=request.user) | Q(analyses__created_by=request.user)
+            ).annotate(
+                analyses_count=Count('analyses'),
+                latest_analysis=Max('analyses__created_at')
+            ).distinct().order_by('-latest_analysis', '-created_at')
         else:
             # Doctors only see patients they have tested (performed analyses on)
-            # Get patient IDs where the current user created an analysis
             patients = Patient.objects.select_related(
                 'created_by', 'created_by__profile'
             ).filter(
                 analyses__created_by=request.user
             ).annotate(
-                analyses_count=Count('analyses')
-            ).distinct().order_by('-created_at')
+                analyses_count=Count('analyses'),
+                latest_analysis=Max('analyses__created_at')
+            ).distinct().order_by('-latest_analysis', '-created_at')
 
         # Statistics
         total_patients = patients.count()
@@ -740,11 +905,44 @@ class AddPatientView(View):
             patient.notes = request.POST.get('notes') or patient.notes
             patient.save()
 
-            messages.success(request, f'Patient "{patient.full_name}" updated successfully!')
-            return redirect(f'/admin/patient/{patient_id}/')
+            # Handle password change / account creation
+            new_password = request.POST.get('patient_password')
+            if new_password:
+                if patient.user_account:
+                    # Update password on existing linked account
+                    patient.user_account.set_password(new_password)
+                    patient.user_account.save()
+                    messages.success(request, f'Patient "{patient.full_name}" updated and password changed successfully!')
+                elif patient.email or patient.phone:
+                    # No linked account yet — create one now
+                    username = patient.email if patient.email else patient.phone
+                    if not User.objects.filter(username=username).exists():
+                        user = User.objects.create_user(
+                            username=username,
+                            email=patient.email or '',
+                            password=new_password,
+                            first_name=patient.first_name,
+                            last_name=patient.last_name,
+                        )
+                        user.profile.role = "patient"
+                        user.profile.phone = patient.phone
+                        user.profile.save()
+                        patient.user_account = user
+                        patient.save()
+                        messages.success(request, f'Patient "{patient.full_name}" updated and login account created (Username: {username})')
+                    else:
+                        messages.warning(request, f'Patient "{patient.full_name}" updated but username "{username}" already exists.')
+                else:
+                    messages.warning(request, f'Patient "{patient.full_name}" updated but no email/phone provided to create a login account.')
+            else:
+                messages.success(request, f'Patient "{patient.full_name}" updated successfully!')
+
+            return redirect(f'/admin/patient/edit/{patient_id}/')
+
+
+
         else:
-            # Create new patient via API
-            import requests
+            # Create new patient
             data = {
                 'first_name': request.POST.get('first_name'),
                 'last_name': request.POST.get('last_name'),
@@ -764,16 +962,39 @@ class AddPatientView(View):
                 'notes': request.POST.get('notes') or None,
             }
 
-            # Create patient and set created_by
             patient = Patient.objects.create(**data)
             if request.user.is_authenticated:
                 patient.created_by = request.user
                 patient.save()
 
-            messages.success(request, f'Patient "{patient.full_name}" added successfully!')
+            # Create user account if password is provided
+            password = request.POST.get('patient_password')
+            if password and (patient.email or patient.phone):
+                username = patient.email if patient.email else patient.phone
+
+                if not User.objects.filter(username=username).exists():
+                    user = User.objects.create_user(
+                        username=username,
+                        email=patient.email or '',
+                        password=password,
+                        first_name=patient.first_name,
+                        last_name=patient.last_name,
+                    )
+                    user.profile.role = "patient"
+                    user.profile.phone = patient.phone
+                    user.profile.save()
+
+                    patient.user_account = user
+                    patient.save()
+
+                    messages.success(request, f'Patient "{patient.full_name}" added successfully! Login account created (Username: {username})')
+                else:
+                    messages.warning(request, f'Patient "{patient.full_name}" added but user account already exists with username "{username}"')
+            else:
+                messages.success(request, f'Patient "{patient.full_name}" added successfully!')
+
             return redirect('/admin/patients/')
-
-
+        
 class PatientProfileView(View):
     """GET/POST /patient/<patient_id> - Patient profile with analysis history and edit functionality"""
     def get(self, request, patient_id):
@@ -790,51 +1011,89 @@ class PatientProfileView(View):
         analyses = Analysis.objects.filter(
             patient=patient
         ).filter(
-            # Show only: batch primary analyses OR standalone analyses (not batch members)
             Q(is_batch_primary=True) | Q(batch_id__isnull=True)
         ).order_by('-created_at').distinct()
 
-        # Convert confidence to percentages for display
-        for analysis in analyses:
-            # For batch primary analyses, use aggregated confidence and data
+        # Date filter
+        date_from = request.GET.get('date_from', '').strip()
+        date_to = request.GET.get('date_to', '').strip()
+        if date_from:
+            try:
+                from datetime import datetime
+                analyses = analyses.filter(created_at__date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                from datetime import datetime
+                analyses = analyses.filter(created_at__date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+            except ValueError:
+                pass
+
+        total_analyses = analyses.count()
+        if total_analyses > 0:
+            avg_confidence_val = sum(a.confidence for a in analyses) / total_analyses
+            latest_analysis = analyses.first()
+        else:
+            avg_confidence_val = 0
+            latest_analysis = None
+
+        from django.core.paginator import Paginator
+        paginator = Paginator(analyses, 10)
+        analyses_page = paginator.get_page(request.GET.get('page'))
+
+        # Enrich only current page items
+        for analysis in analyses_page:
             if analysis.is_batch_primary and analysis.batch_aggregated_data:
                 agg_data = analysis.batch_aggregated_data.get('averaged_prediction', {})
                 analysis.confidence_pct = round(agg_data.get('confidence', analysis.confidence) * 100, 1)
                 analysis.uncertainty_pct = round(agg_data.get('uncertainty', analysis.uncertainty) * 100, 1)
-                # Override confidence for display with aggregated value
                 analysis.display_confidence = agg_data.get('confidence', analysis.confidence)
-                # Use aggregated probabilities if available
                 aggregated_probs = agg_data.get('probabilities', {})
                 if aggregated_probs:
                     analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in aggregated_probs.items()}
                 elif analysis.probabilities:
                     analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
-                # Store batch total count for display
                 analysis.batch_count = analysis.batch_total_count or 1
             else:
                 analysis.confidence_pct = round(analysis.confidence * 100, 1)
                 analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
                 analysis.display_confidence = analysis.confidence
-                # Convert probabilities dict values to percentages
                 if analysis.probabilities:
                     analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
                 analysis.batch_count = 1
 
-        total_analyses = analyses.count()
-        if total_analyses > 0:
-            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-            latest_analysis = analyses.first()
-        else:
-            avg_confidence = 0
-            latest_analysis = None
+        # Risk trend chart — all analyses oldest→newest (unfiltered by date range)
+        import json as _json
+        all_for_chart = list(
+            Analysis.objects.filter(
+                patient=patient
+            ).filter(
+                Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+            ).order_by('created_at').values('predicted_class', 'predicted_label', 'created_at')
+        )
+        chart_dates  = _json.dumps([a['created_at'].strftime('%d %b %Y') for a in all_for_chart])
+        chart_classes = _json.dumps([a['predicted_class'] for a in all_for_chart])
+        chart_labels_map = _json.dumps({
+            0: 'Normal', 1: 'ASC-US', 2: 'LSIL', 3: 'HSIL', 4: 'Carcinoma'
+        })
+
+        # Clinical notes
+        clinical_notes = ClinicalNote.objects.filter(patient=patient).select_related('created_by', 'analysis')
 
         context = {
             'patient': patient,
-            'analyses': analyses,
+            'analyses': analyses_page,
             'total_analyses': total_analyses,
-            'avg_confidence': round(avg_confidence * 100, 2),
+            'avg_confidence': round(avg_confidence_val * 100, 2),
             'latest_analysis': latest_analysis,
             'user_role': request.user.profile.role,
+            'date_from': date_from,
+            'date_to': date_to,
+            'chart_dates': chart_dates,
+            'chart_classes': chart_classes,
+            'chart_labels_map': chart_labels_map,
+            'clinical_notes': clinical_notes,
         }
         return render(request, "patient_profile.html", context)
 
@@ -880,90 +1139,42 @@ class PatientProfileView(View):
         return redirect('/patient/' + str(patient_id))
 
 
+class AddClinicalNoteView(View):
+    """POST /patient/<patient_id>/notes/add/ — add a clinical note for a patient."""
+    def post(self, request, patient_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        role = request.user.profile.role
+        if role not in ('admin', 'user', 'senior_technician'):
+            return redirect('/dashboard/')
+
+        patient = get_object_or_404(Patient, patient_id=patient_id)
+        note_text = request.POST.get('note', '').strip()
+        analysis_id = request.POST.get('analysis_id', '').strip()
+
+        if note_text:
+            analysis = None
+            if analysis_id:
+                try:
+                    analysis = Analysis.objects.get(analysis_id=analysis_id)
+                except Analysis.DoesNotExist:
+                    pass
+            ClinicalNote.objects.create(
+                patient=patient,
+                analysis=analysis,
+                created_by=request.user,
+                note=note_text,
+            )
+            messages.success(request, 'Clinical note added.')
+        else:
+            messages.error(request, 'Note cannot be empty.')
+
+        return redirect(f'/patient/{patient_id}#notes')
+
 
 # ─── Authentication Views (API) ────────────────────────────────────────────────
 
 @method_decorator(csrf_exempt, name='dispatch')
-class RegisterView(APIView):
-    """POST /v1/auth/register - Register a new user (always as 'user' role)"""
-    permission_classes = [AllowAny]
-    parser_classes = [JSONParser]
-
-    def post(self, request):
-        username = request.data.get("username")
-        email = request.data.get("email")
-        password = request.data.get("password")
-        full_name = request.data.get("full_name", "")
-        license_number = request.data.get("license_number", "")
-        department = request.data.get("department", "")
-
-        # Validate required fields
-        if not username or not email or not password:
-            return Response(
-                {"error": "Username, email, and password are required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validate doctor-specific fields
-        if not license_number:
-            return Response(
-                {"error": "Doctor Registration Number is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not department:
-            return Response(
-                {"error": "Department/Role selection is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check if user already exists
-        if User.objects.filter(username=username).exists():
-            return Response(
-                {"error": "Username already exists"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if User.objects.filter(email=email).exists():
-            return Response(
-                {"error": "Email already exists"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Create user with 'user' role (regular user)
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=full_name.split()[0] if full_name else "",
-            last_name=" ".join(full_name.split()[1:]) if full_name else "",
-        )
-        # Set role to 'user' for all registered users
-        # Admin users must be created via Django superuser command
-        user.profile.role = "user"
-        user.profile.license_number = license_number
-        user.profile.department = department
-        user.profile.save()
-
-        # Generate tokens
-        refresh = RefreshToken.for_user(user)
-
-        return Response({
-            "message": "User registered successfully",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "full_name": user.get_full_name(),
-                "role": user.profile.role,
-            },
-            "tokens": {
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-            }
-        }, status=status.HTTP_201_CREATED)
-
-
 @method_decorator(csrf_exempt, name='dispatch')
 class LoginView(APIView):
     """POST /v1/auth/login - Login user and create session"""
@@ -1017,6 +1228,8 @@ class LoginView(APIView):
         # Redirect based on user role
         if user.is_superuser:
             redirect_url = '/admin/'
+        elif user.profile.role == 'patient':
+            redirect_url = '/patient/dashboard/'
         else:
             redirect_url = '/dashboard/'
 
@@ -1066,6 +1279,35 @@ class LogoutView(APIView):
             return Response(
                 {"error": "Invalid token"},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TokenRefreshView(APIView):
+    """POST /api/v1/token/refresh/ - Refresh access token using refresh token"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        refresh = request.data.get("refresh")
+        if not refresh:
+            return Response(
+                {"error": "Refresh token is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            refresh_token = RefreshToken(refresh)
+            access_token = refresh_token.access_token
+
+            return Response({
+                "access": str(access_token),
+                "refresh": str(refresh_token) if getattr(settings, 'SIMPLE_JWT', {}).get('ROTATE_REFRESH_TOKENS', False) else None
+            })
+        except Exception as e:
+            return Response(
+                {"error": "Invalid or expired refresh token"},
+                status=status.HTTP_401_UNAUTHORIZED
             )
 
 
@@ -1145,8 +1387,8 @@ class ChangePasswordView(APIView):
 class PatientListCreateAPIView(APIView):
     """GET/POST /api/v1/patients - List or create patients"""
     permission_classes = [AllowAny]  # Explicitly allow all requests
-    parser_classes = [JSONParser]
-    authentication_classes = []  # Disable authentication to bypass CSRF enforcement
+    parser_classes = [JSONParser, MultiPartParser]
+    authentication_classes = []  # Disable DRF authentication, use session/JWT manually
 
     def get(self, request):
         """List all patients"""
@@ -1160,10 +1402,34 @@ class PatientListCreateAPIView(APIView):
 
     def post(self, request):
         """Create a new patient (admin only)"""
-        # Check if user is authenticated and is an admin
-        if not request.user.is_authenticated:
+        # Check authentication (supports both session and JWT)
+        is_authenticated = request.user.is_authenticated
+
+        # If not authenticated via session, check JWT token
+        if not is_authenticated:
+            try:
+                from rest_framework_simplejwt.authentication import JWTAuthentication
+                jwt_auth = JWTAuthentication()
+                try:
+                    # Manually authenticate with JWT
+                    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+                    if auth_header.startswith('Bearer '):
+                        token = auth_header.split(' ')[1]
+                        from rest_framework_simplejwt.tokens import AccessToken
+                        access_token = AccessToken(token)
+                        user_id = access_token['user_id']
+                        from django.contrib.auth import get_user_model
+                        User = get_user_model()
+                        request.user = User.objects.get(id=user_id)
+                        is_authenticated = True
+                except Exception:
+                    pass
+            except:
+                pass
+
+        if not is_authenticated:
             return Response({
-                "error": "Authentication required"
+                "error": "Authentication required. Please login again."
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         # Check if user is admin
@@ -1356,6 +1622,65 @@ class PatientStatsAPIView(APIView):
             "trend_direction": trend_direction,
             "trend_data": trend_data
         }, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CreatePatientUserView(APIView):
+    """POST /api/v1/patient/<patient_id>/create-user - Create user account for existing patient"""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request, patient_id):
+        # Only doctors/admin can create patient accounts
+        user_role = request.user.profile.role
+        if user_role == 'patient':
+            return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            patient = Patient.objects.get(patient_id=patient_id)
+        except Patient.DoesNotExist:
+            return Response({"error": "Patient not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if patient already has a user account
+        if patient.user_account:
+            return Response({"error": "Patient already has a user account"}, status=status.HTTP_400_BAD_REQUEST)
+
+        password = request.data.get("password")
+
+        if not password:
+            return Response({"error": "Password is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Use email as username if available, otherwise use phone
+        username = patient.email if patient.email else patient.phone
+
+        if not username:
+            return Response({"error": "Patient must have email or phone number for login"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            return Response({"error": f"An account with username '{username}' already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create user with 'patient' role
+        user = User.objects.create_user(
+            username=username,
+            email=patient.email or '',
+            password=password,
+            first_name=patient.first_name,
+            last_name=patient.last_name,
+        )
+        user.profile.role = "patient"
+        user.profile.phone = patient.phone
+        user.profile.save()
+
+        # Link user to patient
+        patient.user_account = user
+        patient.save()
+
+        return Response({
+            "message": "Patient user account created successfully",
+            "username": username,
+            "patient_id": str(patient.patient_id)
+        }, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -1619,51 +1944,374 @@ class AdminDashboardView(View):
         return render(request, "admin_dashboard.html", context)
 
 
-class AdminUsersView(View):
-    """GET /admin/users - View all users (admin only)"""
+from django.core.paginator import Paginator
+from django.contrib import messages
+
+class AdminDoctorsView(View):
+    """GET /admin/doctors - View all doctors"""
     def get(self, request):
         if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/users')
+            return redirect('/login/?next=/admin/doctors/')
 
-        # Allow access if user is admin OR user (authenticated users can see the list)
-        # Comment out the strict admin check for now
-        # if request.user.profile.role != 'admin':
-        #     return redirect('/admin/')
-
-        # Explicitly filter for users with role='user' and exclude superusers
-        # Show only regular users (doctors/staff), no admins or superusers
         users_list = User.objects.select_related('profile').filter(
             profile__role='user',
             is_superuser=False
         ).order_by('-date_joined')
-        
-        from django.core.paginator import Paginator
+
         paginator = Paginator(users_list, 25)
-        page_number = request.GET.get('page')
-        users = paginator.get_page(page_number)
-        
-        context = {
-            'users': users,
-        }
-        return render(request, "admin_users.html", context)
+        users = paginator.get_page(request.GET.get('page'))
 
+        return render(request, "admin_doctors.html", {'users': users})
 
-class AdminUserDetailView(View):
-    """GET /admin/user/<user_id>/ - View detailed doctor information"""
+    def post(self, request):
+        """Handle delete user"""
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        action = request.POST.get('action')
+        user_id = request.POST.get('user_id')
+
+        try:
+            user = User.objects.get(id=user_id, is_superuser=False)
+        except User.DoesNotExist:
+            messages.error(request, 'User not found.')
+            return redirect('/admin/doctors/')
+
+        if action == 'delete':
+            username = user.username
+            user.delete()
+            messages.success(request, f'User "{username}" deleted successfully.')
+
+        return redirect('/admin/doctors/')
+
+class AddDoctorView(View):
+    """GET /admin/doctor/add/ - Add a new doctor account"""
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/doctor/add')
+
+        # Only admins can add doctors
+        if request.user.profile.role != 'admin':
+            messages.error(request, 'Only administrators can add doctors.')
+            return redirect('/admin/doctors/')
+
+        return render(request, 'add_doctor.html')
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        # Only admins can add doctors
+        if request.user.profile.role != 'admin':
+            messages.error(request, 'Only administrators can add doctors.')
+            return redirect('/admin/doctors/')
+
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        first_name = request.POST.get('first_name', '')
+        last_name = request.POST.get('last_name', '')
+        password = request.POST.get('password')
+        phone = request.POST.get('phone', '')
+        department = request.POST.get('department', '')
+        license_number = request.POST.get('license_number', '')
+        role = request.POST.get('role', 'user')
+
+        # Validation
+        if not username or not email or not password:
+            messages.error(request, 'Username, email, and password are required.')
+            return render(request, 'add_doctor.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'phone': phone,
+                'department': department,
+                'license_number': license_number,
+                'role': role,
+            })
+
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Username already exists.')
+            return render(request, 'add_doctor.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'phone': phone,
+                'department': department,
+                'license_number': license_number,
+                'role': role,
+            })
+
+        # Check if email already exists
+        if User.objects.filter(email=email).exists():
+            messages.error(request, 'Email already exists.')
+            return render(request, 'add_doctor.html', {
+                'username': username,
+                'email': email,
+                'first_name': first_name,
+                'last_name': last_name,
+                'phone': phone,
+                'department': department,
+                'license_number': license_number,
+                'role': role,
+            })
+
+        # Create user
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        # Update profile
+        user.profile.role = role
+        user.profile.phone = phone
+        user.profile.department = department
+        user.profile.license_number = license_number
+        user.profile.save()
+
+        messages.success(request, f'Doctor "{username}" has been created successfully.')
+        return redirect('/admin/doctors/')
+
+class EditDoctorView(View):
+    """GET /admin/user/<id>/edit/ - Edit user"""
     def get(self, request, user_id):
         if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/user/' + str(user_id))
+            return redirect('/login/')
 
-        # Allow all authenticated users to view doctor details
-        # Removed admin-only restriction
-        # if request.user.profile.role != 'admin':
-        #     return redirect('/admin/')
+        try:
+            edit_user = User.objects.select_related('profile').get(id=user_id, is_superuser=False)
+        except User.DoesNotExist:
+            messages.error(request, 'User not found.')
+            return redirect('/admin/doctors/')
+
+        return render(request, 'admin_edit_doctors.html', {'edit_user': edit_user})
+
+    def post(self, request, user_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        try:
+            edit_user = User.objects.select_related('profile').get(id=user_id, is_superuser=False)
+        except User.DoesNotExist:
+            messages.error(request, 'User not found.')
+            return redirect('/admin/doctors/')
+
+        # Update User fields
+        edit_user.first_name = request.POST.get('first_name', edit_user.first_name)
+        edit_user.last_name = request.POST.get('last_name', edit_user.last_name)
+        edit_user.email = request.POST.get('email', edit_user.email)
+        edit_user.save()
+
+        # Update Profile fields
+        edit_user.profile.role = request.POST.get('role', edit_user.profile.role)
+        edit_user.profile.phone = request.POST.get('phone') or edit_user.profile.phone
+        edit_user.profile.department = request.POST.get('department') or edit_user.profile.department
+        edit_user.profile.license_number = request.POST.get('license_number') or edit_user.profile.license_number
+        edit_user.profile.save()
+
+        # Handle password change
+        new_password = request.POST.get('password')
+        if new_password:
+            edit_user.set_password(new_password)
+            edit_user.save()
+
+        messages.success(request, f'User "{edit_user.username}" updated successfully!')
+        return redirect('/admin/doctors/')
+
+
+class AdminTechniciansView(View):
+    """GET /admin/technicians/ - List all senior technicians (POST to delete)"""
+
+    def _admin_check(self, request, redirect_to='/admin/technicians/'):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        if request.user.profile.role != 'admin' and not request.user.is_superuser:
+            messages.error(request, 'Access denied.')
+            return redirect('/admin/')
+        return None
+
+    def get(self, request):
+        guard = self._admin_check(request)
+        if guard:
+            return guard
+
+        technicians_list = User.objects.select_related('profile').filter(
+            profile__role='senior_technician',
+            is_superuser=False
+        ).order_by('-date_joined')
+
+        paginator = Paginator(technicians_list, 25)
+        technicians = paginator.get_page(request.GET.get('page'))
+
+        return render(request, 'admin_technicians.html', {'technicians': technicians})
+
+    def post(self, request):
+        guard = self._admin_check(request)
+        if guard:
+            return guard
+
+        action = request.POST.get('action')
+        user_id = request.POST.get('user_id')
+
+        try:
+            user = User.objects.get(id=user_id, profile__role='senior_technician', is_superuser=False)
+        except User.DoesNotExist:
+            messages.error(request, 'Technician not found.')
+            return redirect('/admin/technicians/')
+
+        if action == 'delete':
+            name = user.get_full_name() or user.username
+            user.delete()
+            messages.success(request, f'Technician "{name}" deleted successfully.')
+
+        return redirect('/admin/technicians/')
+
+
+class AddTechnicianView(View):
+    """GET/POST /admin/technician/add/ — Create a senior technician (username = email)"""
+
+    def _admin_check(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/technician/add/')
+        if request.user.profile.role != 'admin' and not request.user.is_superuser:
+            messages.error(request, 'Only administrators can add technicians.')
+            return redirect('/admin/technicians/')
+        return None
+
+    def get(self, request):
+        guard = self._admin_check(request)
+        if guard:
+            return guard
+        return render(request, 'admin_add_technician.html')
+
+    def post(self, request):
+        guard = self._admin_check(request)
+        if guard:
+            return guard
+
+        email = request.POST.get('email', '').strip().lower()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        password = request.POST.get('password', '')
+        phone = request.POST.get('phone', '').strip()
+        department = request.POST.get('department', '').strip()
+        employee_id = request.POST.get('employee_id', '').strip()
+
+        ctx = {
+            'email': email, 'first_name': first_name, 'last_name': last_name,
+            'phone': phone, 'department': department, 'employee_id': employee_id,
+        }
+
+        if not email or not password:
+            messages.error(request, 'Email and password are required.')
+            return render(request, 'admin_add_technician.html', ctx)
+
+        if User.objects.filter(username=email).exists() or User.objects.filter(email=email).exists():
+            messages.error(request, 'A user with this email already exists.')
+            return render(request, 'admin_add_technician.html', ctx)
+
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        user.profile.role = 'senior_technician'
+        user.profile.phone = phone
+        user.profile.department = department
+        user.profile.license_number = employee_id
+        user.profile.save()
+
+        messages.success(request, f'Technician "{email}" created successfully.')
+        return redirect('/admin/technicians/')
+
+
+class EditTechnicianView(View):
+    """GET/POST /admin/technician/<id>/edit/ — Edit a senior technician"""
+
+    def _get_technician(self, user_id):
+        try:
+            return User.objects.select_related('profile').get(
+                id=user_id, profile__role='senior_technician', is_superuser=False
+            )
+        except User.DoesNotExist:
+            return None
+
+    def get(self, request, user_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        tech = self._get_technician(user_id)
+        if not tech:
+            messages.error(request, 'Technician not found.')
+            return redirect('/admin/technicians/')
+        return render(request, 'admin_edit_technician.html', {'tech': tech})
+
+    def post(self, request, user_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        tech = self._get_technician(user_id)
+        if not tech:
+            messages.error(request, 'Technician not found.')
+            return redirect('/admin/technicians/')
+
+        email = request.POST.get('email', '').strip().lower()
+        if email and email != tech.email:
+            if User.objects.filter(email=email).exclude(id=tech.id).exists():
+                messages.error(request, 'Email already in use.')
+                return render(request, 'admin_edit_technician.html', {'tech': tech})
+            tech.email = email
+            tech.username = email
+
+        tech.first_name = request.POST.get('first_name', tech.first_name).strip()
+        tech.last_name = request.POST.get('last_name', tech.last_name).strip()
+        tech.save()
+
+        tech.profile.phone = request.POST.get('phone', tech.profile.phone).strip()
+        tech.profile.department = request.POST.get('department', tech.profile.department).strip()
+        tech.profile.license_number = request.POST.get('employee_id', tech.profile.license_number).strip()
+        tech.profile.save()
+
+        new_password = request.POST.get('password', '').strip()
+        if new_password:
+            tech.set_password(new_password)
+            tech.save()
+
+        messages.success(request, f'Technician "{tech.email}" updated successfully.')
+        return redirect('/admin/technicians/')
+
+
+class AdminDoctorsDetailView(View):
+    """GET /admin/doctors/<user_id>/ - View detailed doctor information"""
+    def get(self, request, user_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/doctors/' + str(user_id))
+
+        # Only allow admins to view doctor details
+        if request.user.profile.role != 'admin':
+            return redirect('/admin/')
 
         target_user = get_object_or_404(User, pk=user_id)
 
-        # Get user's patients
-        patients = Patient.objects.filter(created_by=target_user).order_by('-created_at')[:20]
-        total_patients = patients.count()
+        # Count total unique patients tested by this doctor (via analyses)
+        # Do this BEFORE slicing to get accurate total count
+        total_tested_patients = Patient.objects.filter(
+            analyses__created_by=target_user
+        ).distinct().count()
+
+        # Get unique patients tested by this doctor
+        tested_patients = Patient.objects.filter(
+            analyses__created_by=target_user
+        ).distinct().order_by('-analyses__created_at')
+
+        from django.core.paginator import Paginator
+        patients_paginator = Paginator(tested_patients, 10)
+        patients_page = patients_paginator.get_page(request.GET.get('page'))
 
         # Get user's analyses
         analyses = Analysis.objects.filter(created_by=target_user).order_by('-created_at')
@@ -1689,16 +2337,16 @@ class AdminUserDetailView(View):
 
         context = {
             'target_user': target_user,
-            'patients': patients,
-            'total_patients': total_patients,
-            'analyses': analyses[:20],
+            'patients': patients_page,
+            'total_patients': total_tested_patients,
+            'analyses': analyses[:10],
             'total_analyses': total_analyses,
             'avg_confidence': round(avg_confidence * 100, 2),
             'latest_analysis': latest_analysis,
             'severity_counts': severity_counts,
             'recent_analyses': recent_analyses,
         }
-        return render(request, "admin_user_detail.html", context)
+        return render(request, "admin_doctors_detail.html", context)
 
 
 class AdminUserHistoryView(View):
@@ -1718,7 +2366,7 @@ class AdminUserHistoryView(View):
             created_by=target_user
         ).filter(
             Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).order_by('-created_at')[:50]
+        ).order_by('-created_at')
 
         total_analyses = analyses.count()
         if total_analyses > 0:
@@ -1726,20 +2374,24 @@ class AdminUserHistoryView(View):
         else:
             avg_confidence = 0
 
+        from django.core.paginator import Paginator
+        paginator = Paginator(analyses, 10)
+        analyses_page = paginator.get_page(request.GET.get('page'))
+
         context = {
             'target_user': target_user,
-            'analyses': analyses,
+            'analyses': analyses_page,
             'total_analyses': total_analyses,
             'avg_confidence': round(avg_confidence * 100, 2),
         }
         return render(request, "admin_user_history.html", context)
 
 
-class AdminRegisteredUsersView(View):
-    """GET /admin/registered-users - View and manage all patients created by doctors (admin only)"""
+class AdminPatientsView(View):
+    """GET /admin/patients - View and manage all patients created by doctors (admin only)"""
     def get(self, request):
         if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/registered-users')
+            return redirect('/login/?next=/admin/patients')
 
         # Show patients created by doctors (from Patient model, not User model)
         patients = Patient.objects.select_related(
@@ -1806,14 +2458,29 @@ class AdminTestResultsView(View):
 
         if user_role == 'admin':
             analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile'
-            ).all().order_by('-created_at')
+                'created_by', 'created_by__profile', 'patient'
+            ).all()
         else:
             analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile'
-            ).filter(created_by=request.user).order_by('-created_at')
+                'created_by', 'created_by__profile', 'patient'
+            ).filter(created_by=request.user)
 
-        total_analyses = analyses.count()
+        # Filter out non-primary batch analyses
+        analyses = analyses.filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+        ).order_by('-created_at')
+
+        # Global counts for tab badges (always unfiltered)
+        doctor_count = analyses.filter(created_by__profile__role='user').count()
+        technician_count = analyses.filter(created_by__profile__role='senior_technician').count()
+        total_all = analyses.count()
+
+        # Role filter (doctor / senior_technician / all)
+        role_filter = request.GET.get('role', '')
+        if role_filter in ('user', 'senior_technician'):
+            analyses = analyses.filter(created_by__profile__role=role_filter)
+
+        total_analyses = total_all
 
         severity_counts = {}
         for analysis in analyses:
@@ -1824,26 +2491,28 @@ class AdminTestResultsView(View):
         recent_analyses = analyses.filter(created_at__gte=seven_days_ago).count()
 
         from django.core.paginator import Paginator
-        paginator = Paginator(analyses, 50)
+        paginator = Paginator(analyses, 10)
         page_number = request.GET.get('page')
         analyses_page = paginator.get_page(page_number)
 
-        # Pre-calculate confidence percentages for display (widthratio has integer division issues)
         analyses_with_pct = []
         for analysis in analyses_page:
-            analysis_data = {
+            analyses_with_pct.append({
                 'analysis': analysis,
                 'confidence_pct': round(analysis.confidence * 100, 1),
-            }
-            analyses_with_pct.append(analysis_data)
+            })
 
         context = {
             'analyses': analyses_page,
             'analyses_with_pct': analyses_with_pct,
             'total_analyses': total_analyses,
+            'total_all': total_all,
+            'doctor_count': doctor_count,
+            'technician_count': technician_count,
             'severity_counts': severity_counts,
             'recent_analyses': recent_analyses,
             'user_role': user_role,
+            'role_filter': role_filter,
         }
         return render(request, "admin_test_results.html", context)
 
@@ -1858,12 +2527,18 @@ class AdminTestHistoryView(View):
 
         if user_role == 'admin':
             analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile'
-            ).all().order_by('-created_at')
+                'created_by', 'created_by__profile', 'patient'
+            ).all()
         else:
             analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile'
-            ).filter(created_by=request.user).order_by('-created_at')
+                'created_by', 'created_by__profile', 'patient'
+            ).filter(created_by=request.user)
+
+        # Filter out non-primary batch analyses (show only the primary analysis from each batch)
+        # This prevents showing 10 separate entries when user uploads 10 images as a batch
+        analyses = analyses.filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+        ).order_by('-created_at')
 
         total_analyses = analyses.count()
 
@@ -1892,33 +2567,20 @@ class AdminPatientProfileView(View):
         if not request.user.is_authenticated:
             return redirect('/login/?next=/admin/patient/' + str(patient_id))
 
-        # Allow all authenticated users to view patient profiles
-        # Removed strict admin check - doctors and staff need to see patient details too
-        # if request.user.profile.role != 'admin':
-        #     return redirect('/admin/')
-
         try:
             patient = Patient.objects.select_related('created_by').get(patient_id=patient_id)
         except Patient.DoesNotExist:
-            return redirect('/admin/registered-users/')
+            return redirect('/admin/patients/')
 
-        # Get patient's analyses (test results)
-        analyses = Analysis.objects.filter(patient=patient).order_by('-created_at')
+        analyses = Analysis.objects.filter(patient=patient).filter(
+            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+        ).order_by('-created_at')
         total_analyses = analyses.count()
 
-        # Get patient's appointments
-        appointments = Appointment.objects.filter(patient=patient).order_by('-scheduled_date')[:10]
-
-        # Get patient's treatments
         treatments = TreatmentRecord.objects.filter(patient=patient).order_by('-start_date')[:10]
-
-        # Get patient's follow-ups
         follow_ups = FollowUpRecord.objects.filter(patient=patient).order_by('-scheduled_date')[:10]
-
-        # Get patient's screening records
         screening_records = ScreeningRecord.objects.filter(patient=patient).order_by('-screening_date')[:10]
 
-        # Calculate statistics
         if total_analyses > 0:
             avg_confidence = sum(a.confidence for a in analyses) / total_analyses
             latest_analysis = analyses.first()
@@ -1926,132 +2588,53 @@ class AdminPatientProfileView(View):
             avg_confidence = 0
             latest_analysis = None
 
-        # Prepare analyses with percentage values for display
-        analyses_list = []
-        for analysis in analyses[:20]:
-            analysis_data = {
-                'analysis_id': analysis.analysis_id,
-                'predicted_class': analysis.predicted_class,
-                'predicted_label': analysis.predicted_label,
-                'confidence': analysis.confidence,
-                'confidence_pct': round(analysis.confidence * 100, 1),
-                'uncertainty': analysis.uncertainty,
-                'uncertainty_pct': round(analysis.uncertainty * 100, 1),
-                'confidence_level': analysis.confidence_level,
-                'recommendation': analysis.recommendation,
-                'image': analysis.image,
-                'created_at': analysis.created_at,
-            }
-            analyses_list.append(analysis_data)
-
-        # Calculate severity distribution
         severity_dist = {}
         for analysis in analyses:
             label = analysis.predicted_label
             severity_dist[label] = severity_dist.get(label, 0) + 1
-        
-        severity_distribution = []
-        for label, count in severity_dist.items():
-            percentage = round((count / total_analyses) * 100, 1) if total_analyses > 0 else 0
-            severity_distribution.append((label, count, percentage))
+
+        severity_distribution = [
+            (label, count, round((count / total_analyses) * 100, 1) if total_analyses > 0 else 0)
+            for label, count in severity_dist.items()
+        ]
+
+        from django.core.paginator import Paginator
+
+        def enrich(qs):
+            result = []
+            for a in qs:
+                result.append({
+                    'analysis_id': a.analysis_id,
+                    'predicted_class': a.predicted_class,
+                    'predicted_label': a.predicted_label,
+                    'confidence': a.confidence,
+                    'confidence_pct': round(a.confidence * 100, 1),
+                    'uncertainty': a.uncertainty,
+                    'uncertainty_pct': round(a.uncertainty * 100, 1),
+                    'confidence_level': a.confidence_level,
+                    'recommendation': a.recommendation,
+                    'image': a.image,
+                    'created_at': a.created_at,
+                })
+            return result
+
+        paginator = Paginator(analyses, 10)
+        analyses_page = paginator.get_page(request.GET.get('page'))
+        analyses_list = enrich(analyses_page)
 
         context = {
             'patient': patient,
             'analyses': analyses_list,
+            'analyses_page': analyses_page,
             'total_analyses': total_analyses,
             'avg_confidence': round(avg_confidence * 100, 2),
             'latest_analysis': latest_analysis,
             'severity_distribution': severity_distribution,
-            'appointments': appointments,
             'treatments': treatments,
             'follow_ups': follow_ups,
             'screening_records': screening_records,
         }
         return render(request, "admin_patient_profile.html", context)
-
-    def post(self, request, patient_id):
-        """Handle patient update via POST"""
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/patient/' + str(patient_id))
-
-        try:
-            patient = Patient.objects.get(patient_id=patient_id)
-        except Patient.DoesNotExist:
-            return redirect('/admin/patients/')
-
-        # Update patient fields from POST data
-        patient.first_name = request.POST.get('first_name', patient.first_name)
-        patient.last_name = request.POST.get('last_name', patient.last_name)
-
-        # Handle date fields
-        date_of_birth = request.POST.get('date_of_birth')
-        patient.date_of_birth = date_of_birth if date_of_birth else patient.date_of_birth
-
-        patient.age = request.POST.get('age') or patient.age
-        patient.gender = request.POST.get('gender', patient.gender)
-        patient.phone = request.POST.get('phone') or patient.phone
-        patient.email = request.POST.get('email') or patient.email
-        patient.address = request.POST.get('address') or patient.address
-        patient.hpv_status = request.POST.get('hpv_status', patient.hpv_status)
-
-        # Handle last_screening_date
-        last_screening = request.POST.get('last_screening_date')
-        patient.last_screening_date = last_screening if last_screening else patient.last_screening_date
-
-        patient.pregnancy_status = request.POST.get('pregnancy_status', patient.pregnancy_status)
-        patient.medical_history = request.POST.get('medical_history') or patient.medical_history
-        patient.medications = request.POST.get('medications') or patient.medications
-        patient.allergies = request.POST.get('allergies') or patient.allergies
-        patient.family_history = request.POST.get('family_history') or patient.family_history
-        patient.notes = request.POST.get('notes') or patient.notes
-
-        patient.save()
-
-        # Add success message
-        from django.contrib import messages
-        messages.success(request, f'Patient "{patient.full_name}" updated successfully!')
-
-        # Redirect back to patient profile
-        return redirect(f'/admin/patient/{patient_id}/')
-
-
-class AdminPatientsView(View):
-    """GET /admin/patients - View all patients (admin only)"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/patients')
-
-        if request.user.profile.role != 'admin':
-            return redirect('/admin/')
-
-        patients = Patient.objects.select_related(
-            'created_by', 'created_by__profile'
-        ).all().order_by('-created_at')
-
-        # Statistics
-        total_patients = patients.count()
-        from django.utils import timezone
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_patients = patients.filter(created_at__gte=seven_days_ago).count()
-
-        # Count patients with analyses
-        patients_with_analyses = 0
-        for patient in patients:
-            if patient.analyses.exists():
-                patients_with_analyses += 1
-
-        from django.core.paginator import Paginator
-        paginator = Paginator(patients, 25)
-        page_number = request.GET.get('page')
-        patients_page = paginator.get_page(page_number)
-
-        context = {
-            'patients': patients_page,
-            'total_patients': total_patients,
-            'recent_patients': recent_patients,
-            'total_with_analyses': patients_with_analyses,
-        }
-        return render(request, "admin_patients.html", context)
 
 
 def generate_results_frames(analysis_records, predictions_list):
@@ -2142,6 +2725,13 @@ class AnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Prevent patients from performing analysis
+        if request.user.profile.role == 'patient':
+            return Response(
+                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         # Get all files from request (supports both single and multiple uploads)
         files = request.FILES.getlist('file')
         MAX_FILES = 200
@@ -2168,93 +2758,91 @@ class AnalyzeView(APIView):
         safe_print(f"[DEBUG] Received {len(files)} files for analysis")
 
         allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
-        svc = InferenceService.get()
-        
+        svc = VPSInferenceService.get()
+
         if svc.session is None:
             return Response(
                 {"error": "Model not loaded. Copy cervistage_net.onnx to the models/ directory."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
-        predictions_list = []
-        analysis_records = []
-
-        # Generate batch_id for multi-image uploads
+        recommended_checkups = get_selected_checkups(request)
         batch_id = uuid.uuid4() if len(files) > 1 else None
 
-        # Process each uploaded image
+        # ── Phase 1: validate MIME + image quality ───────────────────────
         invalid_images = []
+        valid_files = []  # (original_index, image_file)
         for idx, image_file in enumerate(files):
-            # Validate MIME type
             if image_file.content_type not in allowed_types:
                 return Response(
                     {"error": f"File {idx+1} ({image_file.name}): Unsupported type {image_file.content_type}. Allowed: JPEG, PNG, BMP, TIFF"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-
-            # Validate image quality for cytology analysis
             validation_result = ImageValidator.validate_file(image_file)
             safe_print(f"[DEBUG] Image {idx+1} validation score: {validation_result['score']}/100")
-
             if not validation_result["is_valid"]:
                 invalid_images.append({
                     "index": idx + 1,
                     "filename": image_file.name,
                     "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
-                    "score": validation_result["score"]
+                    "score": validation_result["score"],
                 })
                 safe_print(f"[WARN] Image {idx+1} failed validation: {validation_result['errors']}")
-                continue  # Skip this image
+                continue
+            image_file.seek(0)  # reset after validation read
+            valid_files.append((idx, image_file))
 
-            try:
-                safe_print(f"[DEBUG] Processing file {idx+1}/{len(files)}: {image_file.name}")
-                prediction = svc.predict(
-                    image_file,
-                    skip_heatmap=skip_heatmap
-                )
-                predictions_list.append(prediction)
-
-                # Store individual analysis record in database
-                image_file.seek(0)
-                extra_fields = {}
-                for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation", "heatmap"):
-                    extra_fields[key] = prediction.pop(key)
-
-                # Get patient_id from request
-                patient_id = request.data.get('patient_id')
-                patient = None
-                if patient_id:
-                    try:
-                        patient = Patient.objects.get(patient_id=patient_id)
-                    except Patient.DoesNotExist:
-                        safe_print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
-
-                image_file.seek(0)
-                analysis = Analysis.objects.create(
-                    created_by=request.user,
-                    patient=patient,
-                    image=image_file,
-                    **prediction,
-                    # Batch metadata
-                    batch_id=batch_id,
-                    is_batch_primary=(idx == 0 and len(files) > 1),
-                    batch_total_count=len(files) if len(files) > 1 else None,
-                    batch_position=idx + 1 if len(files) > 1 else None,
-                )
-                analysis_records.append(analysis)
-                safe_print(f"[DEBUG] ✓ Stored analysis for file {idx+1}: {analysis.analysis_id}")
-
-            except RuntimeError as e:
-                return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        # Handle case where all images were rejected
-        if len(predictions_list) == 0:
+        if not valid_files:
             return Response({
                 "error": "No valid images could be analyzed",
                 "invalid_images": invalid_images,
                 "message": f"All {len(files)} uploaded images failed quality validation. "
-                          "Please ensure you are uploading valid cervical cytology/cell sample images."
+                           "Please ensure you are uploading valid cervical cytology/cell sample images.",
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ── Phase 2: single batch inference call ─────────────────────────
+        try:
+            raw_preds = svc.predict_batch([f for _, f in valid_files])
+        except RuntimeError as e:
+            return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        # ── Phase 3: look up patient once, store DB records ───────────────
+        patient_id = request.data.get('patient_id')
+        patient = None
+        if patient_id:
+            try:
+                patient = Patient.objects.get(patient_id=patient_id)
+            except Patient.DoesNotExist:
+                safe_print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
+
+        predictions_list = []
+        analysis_records = []
+        _DB_SKIP = {"stage_label", "risk_level", "risk_color", "explanation",
+                    "confidence_interpretation", "heatmap", "inference_time"}
+
+        for (orig_idx, image_file), prediction in zip(valid_files, raw_preds):
+            if prediction is None:
+                continue
+            predictions_list.append(prediction)
+            pred_for_db = {k: v for k, v in prediction.items() if k not in _DB_SKIP}
+            image_file.seek(0)
+            safe_print(f"[DEBUG] Processing file {orig_idx+1}/{len(files)}: {image_file.name}")
+            analysis = Analysis.objects.create(
+                created_by=request.user,
+                patient=patient,
+                image=image_file,
+                **pred_for_db,
+                recommended_checkups=recommended_checkups,
+                batch_id=batch_id,
+                is_batch_primary=(orig_idx == 0 and len(files) > 1),
+                batch_total_count=len(files) if len(files) > 1 else None,
+                batch_position=orig_idx + 1 if len(files) > 1 else None,
+            )
+            analysis_records.append(analysis)
+            safe_print(f"[DEBUG] ✓ Stored analysis for file {orig_idx+1}: {analysis.analysis_id}")
+
+        if not predictions_list:
+            return Response({"error": "All images failed inference"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Average predictions across all images
         safe_print(f"[DEBUG] Averaging {len(predictions_list)} predictions")
@@ -2281,6 +2869,7 @@ class AnalyzeView(APIView):
                 "images_analyzed": len(predictions_list),
                 "images_total": len(files),
                 "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+                "recommended_checkups": recommended_checkups,
             }
             primary_analysis.save()
             safe_print(f"[DEBUG] ✓ Updated primary analysis with aggregated data")
@@ -2325,6 +2914,7 @@ class AnalyzeView(APIView):
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
             "frame_urls": frame_urls,
+            "recommended_checkups": recommended_checkups,
             "patient": {
                 "patient_id": str(patient.patient_id) if patient else None,
                 "full_name": patient.full_name if patient else None,
@@ -2359,6 +2949,13 @@ class FastAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Prevent patients from performing analysis
+        if request.user.profile.role == 'patient':
+            return Response(
+                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         files = request.FILES.getlist('file')
         MAX_FILES = 200
 
@@ -2389,6 +2986,7 @@ class FastAnalyzeView(APIView):
         predictions_list = []
         analysis_records = []
         invalid_images = []
+        recommended_checkups = get_selected_checkups(request)
 
         # Generate batch_id for multi-image uploads
         batch_id = uuid.uuid4() if len(files) > 1 else None
@@ -2445,6 +3043,7 @@ class FastAnalyzeView(APIView):
                     patient=patient,
                     image=image_file,
                     **prediction,
+                    recommended_checkups=recommended_checkups,
                     # Batch metadata
                     batch_id=batch_id,
                     is_batch_primary=(idx == 0 and len(files) > 1),
@@ -2491,6 +3090,7 @@ class FastAnalyzeView(APIView):
                 "images_analyzed": len(predictions_list),
                 "images_total": len(files),
                 "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+                "recommended_checkups": recommended_checkups,
             }
             primary_analysis.save(update_fields=['batch_aggregated_data'])
 
@@ -2522,6 +3122,7 @@ class FastAnalyzeView(APIView):
             "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
+            "recommended_checkups": recommended_checkups,
             "patient": {
                 "patient_id": str(patient.patient_id) if patient else None,
                 "full_name": patient.full_name if patient else None,
@@ -2556,6 +3157,13 @@ class VPSAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Prevent patients from performing analysis
+        if request.user.profile.role == 'patient':
+            return Response(
+                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         files = request.FILES.getlist('file')
         MAX_FILES = 200
 
@@ -2584,6 +3192,7 @@ class VPSAnalyzeView(APIView):
         predictions_list = []
         analysis_records = []
         invalid_images = []
+        recommended_checkups = get_selected_checkups(request)
 
         # Generate batch_id for multi-image uploads
         batch_id = uuid.uuid4() if len(files) > 1 else None
@@ -2637,6 +3246,7 @@ class VPSAnalyzeView(APIView):
                     uncertainty=prediction["uncertainty"],
                     confidence_level=prediction["confidence_level"],
                     recommendation=prediction["recommendation"],
+                    recommended_checkups=recommended_checkups,
                     # Batch metadata
                     batch_id=batch_id,
                     is_batch_primary=(idx == 0 and len(files) > 1),
@@ -2683,6 +3293,7 @@ class VPSAnalyzeView(APIView):
                 "images_analyzed": len(predictions_list),
                 "images_total": len(files),
                 "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+                "recommended_checkups": recommended_checkups,
             }
             primary_analysis.save(update_fields=['batch_aggregated_data'])
 
@@ -2724,6 +3335,7 @@ class VPSAnalyzeView(APIView):
             "individual_analyses": [str(a.analysis_id) for a in analysis_records],
             "individual_results": individual_results,
             "frame_urls": frame_urls,
+            "recommended_checkups": recommended_checkups,
             "patient": {
                 "patient_id": str(patient.patient_id) if patient else None,
                 "full_name": patient.full_name if patient else None,
@@ -2791,370 +3403,452 @@ class ReportView(APIView):
         return response
 
     def _generate_pdf(self, analysis, user_name):
-        """Generate comprehensive PDF report with patient information and analysis results."""
+        """Generate a clean, professional PDF report for single or batch analysis."""
         import io
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
-        from reportlab.lib.units import cm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
+        from reportlab.lib.units import cm, mm
+        from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                         Paragraph, Spacer, PageBreak, Image,
+                                         HRFlowable, KeepTogether)
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_LEFT, TA_CENTER
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+        from reportlab.pdfgen import canvas as pdfcanvas
+
+        W, H = A4
+        MARGIN = 1.8 * cm
+        INNER_W = W - 2 * MARGIN
 
         buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=1.5*cm, leftMargin=1.5*cm,
-                                topMargin=1.5*cm, bottomMargin=1.5*cm)
 
-        # Styles
+        # ── stage palette ──────────────────────────────────────────────────────
+        STAGE_BG   = {0:'#dcfce7', 1:'#ecfccb', 2:'#fef9c3', 3:'#ffedd5', 4:'#fee2e2'}
+        STAGE_FG   = {0:'#166534', 1:'#365314', 2:'#713f12', 3:'#7c2d12', 4:'#7f1d1d'}
+        STAGE_ACCENT = {0:'#22c55e', 1:'#84cc16', 2:'#eab308', 3:'#f97316', 4:'#ef4444'}
+
+        # ── styles ─────────────────────────────────────────────────────────────
         styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
-                                     fontSize=18, textColor=colors.HexColor('#1e3a8a'),
-                                     spaceAfter=0.3*cm, alignment=TA_CENTER)
-        subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Normal'],
-                                       fontSize=10, textColor=colors.gray,
-                                       spaceAfter=1*cm, alignment=TA_CENTER)
-        heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'],
-                                       fontSize=12, textColor=colors.HexColor('#1e3a8a'),
-                                       spaceAfter=0.3*cm, spaceBefore=0.5*cm,
-                                       fontName='Helvetica-Bold')
-        normal_style = styles['Normal']
-        small_style = ParagraphStyle('Small', parent=styles['Normal'],
-                                     fontSize=9, textColor=colors.black)
 
-        # Stage colors for results
-        stage_colors = {
-            0: '#22c55e',
-            1: '#84cc16',
-            2: '#eab308',
-            3: '#f97316',
-            4: '#ef4444'
-        }
+        def S(name, **kw):
+            base = kw.pop('parent', styles['Normal'])
+            return ParagraphStyle(name, parent=base, **kw)
+
+        hdr_style   = S('Hdr',   fontSize=20, textColor=colors.white,
+                        fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=0)
+        sub_style   = S('Sub',   fontSize=9,  textColor=colors.HexColor('#cbd5e1'),
+                        alignment=TA_CENTER, spaceAfter=0)
+        sec_style   = S('Sec',   fontSize=11, textColor=colors.HexColor('#1e3a8a'),
+                        fontName='Helvetica-Bold', spaceBefore=0.4*cm, spaceAfter=0.2*cm)
+        body_style  = S('Body',  fontSize=9,  textColor=colors.HexColor('#1e293b'))
+        small_style = S('Sm',    fontSize=8,  textColor=colors.HexColor('#475569'))
+        label_style = S('Lbl',   fontSize=8,  textColor=colors.HexColor('#64748b'),
+                        fontName='Helvetica-Bold')
+        val_style   = S('Val',   fontSize=9,  textColor=colors.HexColor('#0f172a'))
+        center_style= S('Ctr',   fontSize=9,  alignment=TA_CENTER)
+        foot_style  = S('Foot',  fontSize=7,  textColor=colors.HexColor('#94a3b8'),
+                        alignment=TA_CENTER)
+
+        # ── page header/footer callback ────────────────────────────────────────
+        gen_time = analysis.created_at.strftime('%Y-%m-%d %H:%M UTC')
+
+        def on_page(canv, doc):
+            canv.saveState()
+            # top banner
+            canv.setFillColor(colors.HexColor('#1e3a8a'))
+            canv.rect(0, H - 2*cm, W, 2*cm, fill=1, stroke=0)
+            canv.setFont('Helvetica-Bold', 13)
+            canv.setFillColor(colors.white)
+            canv.drawString(MARGIN, H - 1.3*cm, 'CerviStage AI — Clinical Report')
+            canv.setFont('Helvetica', 8)
+            canv.setFillColor(colors.HexColor('#93c5fd'))
+            canv.drawRightString(W - MARGIN, H - 1.3*cm,
+                                 f'Generated: {gen_time}')
+            # bottom line
+            canv.setStrokeColor(colors.HexColor('#e2e8f0'))
+            canv.setLineWidth(0.5)
+            canv.line(MARGIN, 1.2*cm, W - MARGIN, 1.2*cm)
+            canv.setFont('Helvetica', 7)
+            canv.setFillColor(colors.HexColor('#94a3b8'))
+            canv.drawString(MARGIN, 0.6*cm,
+                            'For clinical screening assistance only — not a substitute for professional diagnosis.')
+            canv.drawRightString(W - MARGIN, 0.6*cm,
+                                 f'Page {doc.page}')
+            canv.restoreState()
+
+        doc = SimpleDocTemplate(
+            buf, pagesize=A4,
+            rightMargin=MARGIN, leftMargin=MARGIN,
+            topMargin=2.4*cm, bottomMargin=1.8*cm,
+            onFirstPage=on_page, onLaterPages=on_page,
+        )
 
         content = []
 
-        # Header
-        content.append(Paragraph("CerviStage AI — Clinical Report", title_style))
-        content.append(Paragraph("AI-Based Cervical Cancer Detection & Staging System", subtitle_style))
+        # ── helpers ────────────────────────────────────────────────────────────
+        def divider():
+            return HRFlowable(width='100%', thickness=0.5, color=colors.HexColor('#e2e8f0'),
+                              spaceAfter=0.3*cm, spaceBefore=0.1*cm)
 
-        # Get patient information
+        def section(title):
+            return Paragraph(title, sec_style)
+
+        def kv_table(rows, col_w=None):
+            """Two-column key-value table."""
+            col_w = col_w or [4.5*cm, INNER_W - 4.5*cm]
+            data = [[Paragraph(k, label_style), Paragraph(str(v), val_style)] for k, v in rows]
+            t = Table(data, colWidths=col_w)
+            t.setStyle(TableStyle([
+                ('VALIGN',        (0,0), (-1,-1), 'TOP'),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+                ('TOPPADDING',    (0,0), (-1,-1), 3),
+                ('ROWBACKGROUNDS',(0,0),(-1,-1),
+                 [colors.HexColor('#f8fafc'), colors.white]),
+            ]))
+            return t
+
+        def colored_badge(text, bg, fg):
+            badge = Table([[Paragraph(text, ParagraphStyle(
+                'badge', parent=styles['Normal'],
+                fontSize=14, fontName='Helvetica-Bold',
+                textColor=colors.HexColor(fg), alignment=TA_CENTER))]],
+                colWidths=[INNER_W])
+            badge.setStyle(TableStyle([
+                ('BACKGROUND',    (0,0),(-1,-1), colors.HexColor(bg)),
+                ('ROUNDEDCORNERS',(0,0),(-1,-1), [6,6,6,6]),
+                ('TOPPADDING',    (0,0),(-1,-1), 10),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 10),
+            ]))
+            return badge
+
+        def prob_bars(probs_dict, predicted_class):
+            """Render probability bars as a table."""
+            CLASS_COLORS = ['#22c55e','#84cc16','#eab308','#f97316','#ef4444']
+            BAR_W = INNER_W - 5*cm - 2*cm
+            rows = []
+            for cls_idx, (label, prob) in enumerate(probs_dict.items()):
+                pct = float(prob) * 100
+                fill_w  = max(pct / 100 * BAR_W, 0.01*cm)
+                empty_w = max(BAR_W - fill_w, 0.01*cm)
+                bar_color = CLASS_COLORS[cls_idx] if cls_idx < len(CLASS_COLORS) else '#94a3b8'
+                is_pred = (cls_idx == predicted_class)
+                bar_row = Table(
+                    [[''      , '']],
+                    colWidths=[fill_w, empty_w]
+                )
+                bar_row.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0),(0,0), colors.HexColor(bar_color)),
+                    ('BACKGROUND', (1,0),(1,0), colors.HexColor('#e2e8f0')),
+                    ('TOPPADDING',(0,0),(-1,-1),0),
+                    ('BOTTOMPADDING',(0,0),(-1,-1),0),
+                    ('LEFTPADDING',(0,0),(-1,-1),0),
+                    ('RIGHTPADDING',(0,0),(-1,-1),0),
+                ]))
+                lbl_para = Paragraph(
+                    f'<b>{label}</b>' if is_pred else label,
+                    ParagraphStyle('pl', parent=styles['Normal'], fontSize=8,
+                                   textColor=colors.HexColor('#0f172a' if is_pred else '#475569'))
+                )
+                pct_para = Paragraph(
+                    f'<b>{pct:.1f}%</b>' if is_pred else f'{pct:.1f}%',
+                    ParagraphStyle('pp', parent=styles['Normal'], fontSize=8,
+                                   alignment=TA_RIGHT,
+                                   textColor=colors.HexColor('#0f172a' if is_pred else '#64748b'))
+                )
+                rows.append([lbl_para, bar_row, pct_para])
+
+            t = Table(rows, colWidths=[5*cm, BAR_W, 2*cm])
+            t.setStyle(TableStyle([
+                ('VALIGN',        (0,0),(-1,-1),'MIDDLE'),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+                ('TOPPADDING',    (0,0),(-1,-1), 5),
+                ('LEFTPADDING',   (1,0),(1,-1), 0),
+                ('RIGHTPADDING',  (1,0),(1,-1), 0),
+            ]))
+            return t
+
+        def safe_image(path, w, h):
+            if path and os.path.exists(path):
+                try:
+                    return Image(path, width=w, height=h, lazy=2)
+                except Exception:
+                    pass
+            return Paragraph('<i>Image unavailable</i>', small_style)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # PAGE 1 — Patient Info + Report Meta
+        # ══════════════════════════════════════════════════════════════════════
+        content.append(Spacer(1, 0.3*cm))
+
         patient = analysis.patient
-        patient_data = []
 
-        # Patient Information Section
-        if patient:
-            content.append(Paragraph("Patient Information", heading_style))
-
-            # Basic Information - Only fields used in patient creation form
-            patient_data = [
-                ['Full Name:', patient.full_name or '—'],
-                ['Patient ID:', str(patient.patient_id)[:8] if patient.patient_id else '—'],
-                ['Age:', str(patient.age) if patient.age else '—'],
-                ['Gender:', dict(patient._meta.get_field('gender').choices).get(patient.gender, '—')],
-                ['Phone:', patient.phone or '—'],
-                ['Email:', patient.email or '—'],
-                ['Date of Birth:', patient.date_of_birth.strftime('%Y-%m-%d') if patient.date_of_birth else '—'],
-                ['Address:', patient.address or '—'],
-            ]
-
-            # Create patient info table (2 columns for compact display)
-            patient_table_data = []
-            for i in range(0, len(patient_data), 2):
-                row = []
-                for j in range(i, min(i + 2, len(patient_data))):
-                    label, value = patient_data[j]
-                    row.append(Paragraph(f"<b>{label}</b> {value}", small_style))
-                # Pad if odd number of items
-                if len(row) == 1:
-                    row.append('')
-                patient_table_data.append(row)
-
-            patient_table = Table(patient_table_data, colWidths=[8*cm, 8*cm])
-            patient_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
-            ]))
-            content.append(patient_table)
-            content.append(Spacer(1, 0.3*cm))
-
-            # Medical Information
-            content.append(Paragraph("Medical Information", heading_style))
-            medical_info_data = [
-                ['HPV Status:', patient.get_hpv_status_display() or '—'],
-                ['Last Screening:', patient.last_screening_date.strftime('%Y-%m-%d') if patient.last_screening_date else '—'],
-                ['Pregnancy Status:', patient.get_pregnancy_status_display() or '—'],
-            ]
-            medical_table = Table([
-                [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in medical_info_data]
-            ], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
-            medical_table.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ]))
-            content.append(medical_table)
-            content.append(Spacer(1, 0.3*cm))
-
-            # Medical History (if available)
-            if any([patient.medical_history, patient.medications, patient.allergies, patient.family_history, patient.notes]):
-                content.append(Paragraph("Medical History", heading_style))
-
-                history_data = []
-                if patient.medical_history:
-                    history_data.append(['Medical History:', patient.medical_history])
-                if patient.medications:
-                    history_data.append(['Current Medications:', patient.medications])
-                if patient.allergies:
-                    history_data.append(['Allergies:', patient.allergies])
-                if patient.family_history:
-                    history_data.append(['Family History:', patient.family_history])
-                if patient.notes:
-                    history_data.append(['Additional Notes:', patient.notes])
-
-                for label, value in history_data:
-                    history_table = Table([
-                        [Paragraph(f"<b>{label}</b>", small_style), Paragraph(value, small_style)]
-                    ], colWidths=[4*cm, 12*cm])
-                    history_table.setStyle(TableStyle([
-                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#f3f4f6')),
-                    ]))
-                    content.append(history_table)
-                    content.append(Spacer(1, 0.1*cm))
-
-            content.append(PageBreak())
-
-        # Report & Analysis Information
-        content.append(Paragraph("Analysis Report", heading_style))
-
-        report_info = [
-            ['Analysis ID:', str(analysis.analysis_id)],
-            ['Date & Time:', analysis.created_at.strftime('%Y-%m-%d %H:%M') + ' UTC'],
-            ['Analyzed by:', user_name or '—'],
+        # Report meta row
+        meta_data = [
+            [Paragraph('Analysis ID', label_style),
+             Paragraph('Date & Time', label_style),
+             Paragraph('Analyzed By', label_style)],
+            [Paragraph(str(analysis.analysis_id)[:16] + '…', val_style),
+             Paragraph(analysis.created_at.strftime('%d %b %Y, %H:%M'), val_style),
+             Paragraph(user_name or '—', val_style)],
         ]
-        report_table = Table([
-            [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in report_info]
-        ], colWidths=[17*cm])
-        report_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        meta_t = Table(meta_data, colWidths=[INNER_W/3]*3)
+        meta_t.setStyle(TableStyle([
+            ('BACKGROUND',    (0,0),(-1,0), colors.HexColor('#f1f5f9')),
+            ('BACKGROUND',    (0,1),(-1,1), colors.HexColor('#f8fafc')),
+            ('BOX',           (0,0),(-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+            ('INNERGRID',     (0,0),(-1,-1), 0.3, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING',    (0,0),(-1,-1), 6),
+            ('BOTTOMPADDING', (0,0),(-1,-1), 6),
+            ('LEFTPADDING',   (0,0),(-1,-1), 8),
+            ('VALIGN',        (0,0),(-1,-1), 'MIDDLE'),
         ]))
-        content.append(report_table)
+        content.append(meta_t)
         content.append(Spacer(1, 0.5*cm))
 
-        # Images Analyzed Section
-        # Check if this is a batch analysis
+        if patient:
+            content.append(section('Patient Information'))
+            content.append(divider())
+
+            basic = kv_table([
+                ('Full Name',    patient.full_name or '—'),
+                ('Patient ID',   str(patient.patient_id)[:8] if patient.patient_id else '—'),
+                ('Date of Birth',patient.date_of_birth.strftime('%d %b %Y') if patient.date_of_birth else '—'),
+                ('Age',          str(patient.age) if patient.age else '—'),
+                ('Gender',       dict(patient._meta.get_field('gender').choices).get(patient.gender,'—')),
+                ('Phone',        patient.phone or '—'),
+                ('Email',        patient.email or '—'),
+                ('Address',      patient.address or '—'),
+            ])
+            content.append(basic)
+            content.append(Spacer(1, 0.3*cm))
+
+            content.append(section('Medical Information'))
+            content.append(divider())
+            content.append(kv_table([
+                ('HPV Status',       patient.get_hpv_status_display() or '—'),
+                ('Pregnancy Status', patient.get_pregnancy_status_display() or '—'),
+                ('Last Screening',   patient.last_screening_date.strftime('%d %b %Y') if patient.last_screening_date else '—'),
+            ]))
+
+            extras = [
+                ('Medical History',    patient.medical_history),
+                ('Current Medications',patient.medications),
+                ('Allergies',          patient.allergies),
+                ('Family History',     patient.family_history),
+                ('Additional Notes',   patient.notes),
+            ]
+            extras = [(k,v) for k,v in extras if v]
+            if extras:
+                content.append(Spacer(1, 0.3*cm))
+                content.append(section('Clinical History'))
+                content.append(divider())
+                content.append(kv_table(extras))
+
+        content.append(PageBreak())
+
+        # ══════════════════════════════════════════════════════════════════════
+        # Determine single vs batch
+        # ══════════════════════════════════════════════════════════════════════
         batch_analyses = []
         if analysis.batch_id:
-            batch_analyses = list(Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position'))
-            # Add computed probabilities to each batch analysis
+            batch_analyses = list(
+                Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position')
+            )
             for ba in batch_analyses:
                 ba.confidence_pct = round(ba.confidence * 100, 1)
-                ba.probabilities_pct = {k: round(v * 100, 1) for k, v in ba.probabilities.items()}
+                if ba.probabilities:
+                    ba.probabilities_pct = {k: round(float(v)*100, 1) for k,v in ba.probabilities.items()}
+                else:
+                    ba.probabilities_pct = {}
 
-        if batch_analyses:
-            # Batch Analysis Report
-            content.append(Paragraph("Batch Analysis Report", heading_style))
-            content.append(Paragraph(f"Batch ID: {str(analysis.batch_id)[:8]} — {len(batch_analyses)} images analyzed", small_style))
+        is_batch = bool(batch_analyses)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SINGLE IMAGE ANALYSIS
+        # ══════════════════════════════════════════════════════════════════════
+        if not is_batch:
+            cls = analysis.predicted_class
+            bg  = STAGE_BG.get(cls, '#f1f5f9')
+            fg  = STAGE_FG.get(cls, '#0f172a')
+            acc = STAGE_ACCENT.get(cls, '#64748b')
+
+            content.append(section('Analysis Result'))
+            content.append(divider())
+
+            # Result banner
+            content.append(colored_badge(analysis.predicted_label, bg, fg))
             content.append(Spacer(1, 0.3*cm))
 
-            # Show each batch image with its results
-            for idx, ba in enumerate(batch_analyses, 1):
-                content.append(Paragraph(f"Image {idx}", heading_style))
+            # Image + key metrics side by side
+            img_w, img_h = 8*cm, 6*cm
+            img_cell = safe_image(
+                analysis.image.path if analysis.image else None, img_w, img_h)
 
-                if ba.image and os.path.exists(ba.image.path):
-                    try:
-                        # Create image with proper sizing
-                        img = Image(ba.image.path, width=6*cm, height=4.5*cm, lazy=2, hAlign='LEFT')
-                        img.hAlign = 'LEFT'
-                        content.append(img)
-                        content.append(Spacer(1, 0.2*cm))
-                    except Exception as e:
-                        content.append(Paragraph(f"<b>Note:</b> Unable to include image. Error: {str(e)}", small_style))
+            metrics = [
+                ('Confidence',  f"{round(analysis.confidence*100)}%"),
+                ('AI Level',    analysis.confidence_level),
+            ]
+            metrics_t = kv_table(metrics, col_w=[4*cm, INNER_W - img_w - 1*cm - 4*cm])
 
-                # Individual result for this image
-                result_color_hex = stage_colors.get(ba.predicted_class, '#808080')
-                result_data = [
-                    [Paragraph("Predicted Stage:", small_style),
-                     Paragraph(f"<font size=12 color='{result_color_hex}'>{ba.predicted_label}</font>", normal_style)],
-                    ['Confidence:', f"{ba.confidence_pct}%"],
-                ]
+            side_t = Table([[img_cell, metrics_t]],
+                           colWidths=[img_w + 0.5*cm, INNER_W - img_w - 0.5*cm])
+            side_t.setStyle(TableStyle([
+                ('VALIGN', (0,0),(-1,-1),'TOP'),
+                ('LEFTPADDING',  (1,0),(1,-1), 0.5*cm),
+                ('TOPPADDING',   (0,0),(-1,-1), 0),
+                ('BOTTOMPADDING',(0,0),(-1,-1), 0),
+            ]))
+            content.append(side_t)
+            content.append(Spacer(1, 0.5*cm))
 
-                result_table = Table(result_data, colWidths=[4*cm, 13*cm])
-                result_table.setStyle(TableStyle([
-                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.15*cm),
-                ]))
-                content.append(result_table)
-                content.append(Spacer(1, 0.2*cm))
+            # Probabilities
+            if analysis.probabilities:
+                content.append(section('Class Probabilities'))
+                content.append(divider())
+                content.append(prob_bars(analysis.probabilities, cls))
+                content.append(Spacer(1, 0.4*cm))
 
-                # Mini probabilities table
-                prob_data = [['Class', 'Prob']]
-                for label, prob in sorted(ba.probabilities_pct.items(), key=lambda x: float(x[1]), reverse=True):
-                    prob_data.append([
-                        Paragraph(label, small_style),
-                        Paragraph(f"{prob:.1f}%", small_style)
-                    ])
+        # ══════════════════════════════════════════════════════════════════════
+        # BATCH IMAGE ANALYSIS
+        # ══════════════════════════════════════════════════════════════════════
+        else:
+            agg = analysis.batch_aggregated_data or {}
+            avg_pred = agg.get('averaged_prediction', {})
+            avg_cls  = avg_pred.get('predicted_class', analysis.predicted_class)
+            avg_lbl  = avg_pred.get('predicted_label', analysis.predicted_label)
+            avg_conf = round(avg_pred.get('confidence', analysis.confidence) * 100)
 
-                prob_table = Table(prob_data, colWidths=[4*cm, 2*cm])
-                prob_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.1*cm),
-                ]))
-                content.append(prob_table)
-                content.append(Spacer(1, 0.3*cm))
+            bg  = STAGE_BG.get(avg_cls, '#f1f5f9')
+            fg  = STAGE_FG.get(avg_cls, '#0f172a')
 
-                # Add page break after every 2 images (except last)
-                if idx < len(batch_analyses) and idx % 2 == 0:
-                    content.append(PageBreak())
+            content.append(section(f'Batch Analysis Summary — {len(batch_analyses)} Images'))
+            content.append(divider())
+            content.append(colored_badge(avg_lbl, bg, fg))
+            content.append(Spacer(1, 0.2*cm))
 
-            # Add averaged/batch results summary
+            summary_data = [
+                ('Averaged Result',  avg_lbl),
+                ('Avg Confidence',   f'{avg_conf}%'),
+                ('Images Analyzed',  str(len(batch_analyses))),
+                ('Batch ID',         str(analysis.batch_id)[:16] + '…'),
+            ]
+            content.append(kv_table(summary_data))
+            content.append(Spacer(1, 0.5*cm))
+
+            # Averaged probabilities
+            avg_probs = avg_pred.get('probabilities', {})
+            if avg_probs:
+                content.append(section('Averaged Class Probabilities'))
+                content.append(divider())
+                content.append(prob_bars(avg_probs, avg_cls))
+                content.append(Spacer(1, 0.4*cm))
+
             content.append(PageBreak())
-            content.append(Paragraph("Batch Analysis Summary", heading_style))
 
-            if analysis.batch_aggregated_data:
-                agg_data = analysis.batch_aggregated_data
-                avg_pred = agg_data.get('averaged_prediction', {})
+            # Individual images — 2 per row
+            content.append(section('Individual Image Results'))
+            content.append(divider())
 
-                result_color_hex = stage_colors.get(avg_pred.get('predicted_class', 0), '#808080')
-                result_data = [
-                    [Paragraph("Averaged Prediction:", small_style),
-                     Paragraph(f"<font size=14 color='{result_color_hex}'>{avg_pred.get('predicted_label', 'N/A')}</font>", normal_style)],
-                    ['Confidence:', f"{round(avg_pred.get('confidence', 0) * 100)}%"],
-                ]
+            THUMB_W = (INNER_W - 0.5*cm) / 2
+            THUMB_H = THUMB_W * 0.7
 
-                result_table = Table(result_data, colWidths=[5*cm, 12*cm])
-                result_table.setStyle(TableStyle([
-                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
-                ]))
-                content.append(result_table)
-                content.append(Spacer(1, 0.3*cm))
+            for i in range(0, len(batch_analyses), 2):
+                pair = batch_analyses[i:i+2]
+                cells = []
+                for ba in pair:
+                    cls_b = ba.predicted_class
+                    bg_b  = STAGE_BG.get(cls_b, '#f1f5f9')
+                    fg_b  = STAGE_FG.get(cls_b, '#0f172a')
+                    acc_b = STAGE_ACCENT.get(cls_b, '#94a3b8')
 
-        elif analysis.image:
-            # Single image analysis
-            content.append(Paragraph("Images Analyzed", heading_style))
+                    img_el = safe_image(
+                        ba.image.path if ba.image else None, THUMB_W, THUMB_H)
 
-            # Get image path
-            image_path = analysis.image.path
-            if os.path.exists(image_path):
-                try:
-                    # Create image with proper sizing (max width 8cm, max height 6cm)
-                    img = Image(image_path, width=8*cm, height=6*cm, lazy=2, hAlign='CENTER')
-                    img.hAlign = 'CENTER'
-                    content.append(img)
-                    content.append(Spacer(1, 0.3*cm))
-
-                    # Image info table
-                    from PIL import Image as PILImage
-                    with PILImage.open(image_path) as pil_img:
-                        width, height = pil_img.size
-                        image_format = pil_img.format or 'Unknown'
-                        file_size = os.path.getsize(image_path) / (1024 * 1024)  # Size in MB
-
-                    image_info_data = [
-                        ['File Name:', os.path.basename(image_path)],
-                        ['Dimensions:', f"{width} x {height} pixels"],
-                        ['Format:', image_format],
-                        ['File Size:', f"{file_size:.2f} MB"],
-                    ]
-
-                    image_info_table = Table([
-                        [Paragraph(f"<b>{k}</b> {v}", small_style) for k, v in image_info_data]
-                    ], colWidths=[8.5*cm, 8.5*cm])
-                    image_info_table.setStyle(TableStyle([
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 0.15*cm),
+                    lbl_t = Table(
+                        [[Paragraph(ba.predicted_label,
+                           ParagraphStyle('bl', parent=styles['Normal'],
+                               fontSize=9, fontName='Helvetica-Bold',
+                               textColor=colors.HexColor(fg_b), alignment=TA_CENTER))]],
+                        colWidths=[THUMB_W])
+                    lbl_t.setStyle(TableStyle([
+                        ('BACKGROUND', (0,0),(-1,-1), colors.HexColor(bg_b)),
+                        ('TOPPADDING', (0,0),(-1,-1), 4),
+                        ('BOTTOMPADDING',(0,0),(-1,-1), 4),
                     ]))
-                    content.append(image_info_table)
-                    content.append(Spacer(1, 0.5*cm))
-                except Exception as e:
-                    content.append(Paragraph(f"<b>Note:</b> Unable to include image in report. Error: {str(e)}", small_style))
-                    content.append(Spacer(1, 0.3*cm))
-            else:
-                content.append(Paragraph("<b>Note:</b> Image file not found on server.", small_style))
+
+                    conf_t = Paragraph(
+                        f'Confidence: <b>{ba.confidence_pct}%</b>',
+                        ParagraphStyle('bc', parent=styles['Normal'],
+                                       fontSize=8, alignment=TA_CENTER,
+                                       textColor=colors.HexColor('#475569')))
+
+                    cell_inner = Table(
+                        [[img_el], [lbl_t], [conf_t]],
+                        colWidths=[THUMB_W])
+                    cell_inner.setStyle(TableStyle([
+                        ('VALIGN',        (0,0),(-1,-1),'MIDDLE'),
+                        ('TOPPADDING',    (0,0),(-1,-1), 2),
+                        ('BOTTOMPADDING', (0,0),(-1,-1), 2),
+                        ('BOX', (0,0),(-1,-1), 0.5, colors.HexColor('#e2e8f0')),
+                    ]))
+                    cells.append(cell_inner)
+
+                # Pad to 2 cols
+                while len(cells) < 2:
+                    cells.append('')
+
+                row_t = Table([cells], colWidths=[THUMB_W, THUMB_W],
+                              hAlign='LEFT', spaceBefore=0.3*cm)
+                row_t.setStyle(TableStyle([
+                    ('VALIGN',       (0,0),(-1,-1),'TOP'),
+                    ('LEFTPADDING',  (0,0),(-1,-1), 0),
+                    ('RIGHTPADDING', (0,0),(-1,-1), 0),
+                    ('COLPADDING',   (0,0),(0,-1),  0.25*cm),
+                ]))
+                content.append(row_t)
                 content.append(Spacer(1, 0.3*cm))
 
-        # Staging Result
-        content.append(Paragraph("Staging Result", heading_style))
-        result_color_hex = stage_colors.get(analysis.predicted_class, '#808080')
+        # ══════════════════════════════════════════════════════════════════════
+        # Clinical Recommendation + Checkups (both single & batch)
+        # ══════════════════════════════════════════════════════════════════════
+        if analysis.recommendation:
+            content.append(section('Clinical Recommendation'))
+            content.append(divider())
+            rec_t = Table(
+                [[Paragraph(analysis.recommendation, body_style)]],
+                colWidths=[INNER_W])
+            rec_t.setStyle(TableStyle([
+                ('BACKGROUND',    (0,0),(-1,-1), colors.HexColor('#fef9c3')),
+                ('BOX',           (0,0),(-1,-1), 1,   colors.HexColor('#fde047')),
+                ('LEFTPADDING',   (0,0),(-1,-1), 10),
+                ('RIGHTPADDING',  (0,0),(-1,-1), 10),
+                ('TOPPADDING',    (0,0),(-1,-1), 8),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 8),
+            ]))
+            content.append(rec_t)
+            content.append(Spacer(1, 0.4*cm))
 
-        result_data = [
-            [Paragraph("Predicted Stage:", small_style),
-             Paragraph(f"<font size=14 color='{result_color_hex}'>{analysis.predicted_label}</font>", normal_style)],
-            ['Confidence:', f"{round(analysis.confidence * 100)}%"],
-            ['Uncertainty:', f"{round(analysis.uncertainty * 100)}%"],
-            ['AI Level:', analysis.confidence_level],
-        ]
+        if analysis.recommended_checkups:
+            content.append(section('Patient Checkups Sent'))
+            content.append(divider())
+            checkup_cells = [
+                [Paragraph(f'✓  {c}', ParagraphStyle(
+                    'ck', parent=styles['Normal'], fontSize=9,
+                    textColor=colors.HexColor('#1e40af')))]
+                for c in analysis.recommended_checkups
+            ]
+            ck_t = Table(checkup_cells, colWidths=[INNER_W])
+            ck_t.setStyle(TableStyle([
+                ('BACKGROUND',    (0,0),(-1,-1), colors.HexColor('#eff6ff')),
+                ('BOX',           (0,0),(-1,-1), 0.5, colors.HexColor('#bfdbfe')),
+                ('TOPPADDING',    (0,0),(-1,-1), 5),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+                ('LEFTPADDING',   (0,0),(-1,-1), 10),
+            ]))
+            content.append(ck_t)
+            content.append(Spacer(1, 0.4*cm))
 
-        result_table = Table(result_data, colWidths=[5*cm, 12*cm])
-        result_table.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
-        ]))
-        content.append(result_table)
-        content.append(Spacer(1, 0.5*cm))
-
-        # Class Probabilities
-        content.append(Paragraph("Class Probabilities", heading_style))
-
-        prob_data = [['Class', 'Probability', 'Visualization']]
-        for label, prob in sorted(analysis.probabilities.items(), key=lambda x: float(x[1]), reverse=True):
-            pct = float(prob) * 100
-            bar_width = pct / 100 * 10  # 10 cm max width
-            prob_data.append([
-                Paragraph(label, small_style),
-                Paragraph(f"{pct:.1f}%", small_style),
-                ''
-            ])
-
-        prob_table = Table(prob_data, colWidths=[5*cm, 2*cm, 10*cm])
-        prob_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a8a')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.2*cm),
-            ('TOPPADDING', (0, 0), (-1, -1), 0.2*cm),
-        ]))
-        content.append(prob_table)
-        content.append(Spacer(1, 0.5*cm))
-
-        # Clinical Recommendation
-        content.append(Paragraph("Clinical Recommendation", heading_style))
-
-        # Draw recommendation box
-        rec_table = Table([
-            [Paragraph(analysis.recommendation or 'No specific recommendation provided.', small_style)]
-        ], colWidths=[17*cm])
-        rec_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fef3c7')),
-            ('BORDERS', (0, 0), (-1, -1), 'solid', 1, colors.HexColor('#f59e0b')),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0.3*cm),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0.3*cm),
-            ('TOPPADDING', (0, 0), (-1, -1), 0.3*cm),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0.3*cm),
-        ]))
-        content.append(rec_table)
-        content.append(Spacer(1, 1*cm))
-
-        # Footer
-        content.append(Paragraph(
-            f"<font size=7 color=gray>Generated by CerviStage AI — For research and screening assistance only. "
-            f"This report should not replace professional medical diagnosis.</font>",
-            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.gray, alignment=TA_CENTER)
-        ))
-        content.append(Paragraph(
-            f"<font size=7 color=gray>Analysis ID: {analysis.analysis_id} | Generated: {analysis.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC</font>",
-            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.gray, alignment=TA_CENTER)
-        ))
-
-        # Build PDF
-        doc.build(content)
+        # Build
+        doc.build(content, onFirstPage=on_page, onLaterPages=on_page)
         buf.seek(0)
         return buf
 
@@ -3367,4 +4061,3 @@ CerviStage AI Team
         except Exception as e:
             messages.error(request, f'Failed to reset password: {str(e)}')
             return render(request, 'verify_otp.html')
-
