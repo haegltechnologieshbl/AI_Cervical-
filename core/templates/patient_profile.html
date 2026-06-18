@@ -4,7 +4,7 @@
 
 {% block content %}
 <!-- Toast Notification Container -->
-<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+<div id="toast-container" class="fixed top-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-auto z-50 space-y-2 pointer-events-none"></div>
 
 <script>
 // Toast notification system
@@ -26,10 +26,10 @@ function showToast(message, type = 'success') {
         info: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
     };
 
-    toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 min-w-[300px] max-w-md transform transition-all duration-300 translate-x-full opacity-0`;
+    toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-3 w-full sm:min-w-[300px] sm:max-w-md transform transition-all duration-300 translate-x-full opacity-0 pointer-events-auto`;
     toast.innerHTML = `
         <div class="flex-shrink-0">${icons[type]}</div>
-        <div class="flex-1">${message}</div>
+        <div class="flex-1 text-sm">${message}</div>
         <button onclick="this.parentElement.remove()" class="flex-shrink-0 text-white hover:text-gray-200">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
@@ -37,19 +37,16 @@ function showToast(message, type = 'success') {
 
     container.appendChild(toast);
 
-    // Animate in
     requestAnimationFrame(() => {
         toast.classList.remove('translate-x-full', 'opacity-0');
     });
 
-    // Auto remove after 5 seconds
     setTimeout(() => {
         toast.classList.add('translate-x-full', 'opacity-0');
         setTimeout(() => toast.remove(), 300);
     }, 5000);
 }
 
-// Show Django messages as toasts on page load
 document.addEventListener('DOMContentLoaded', function() {
     {% if messages %}
         {% for message in messages %}
@@ -62,80 +59,80 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-4">
-                    <button onclick="history.back()" class="text-gray-500 hover:text-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                    <button onclick="history.back()" class="text-gray-500 hover:text-gray-700 flex-shrink-0">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                         </svg>
                     </button>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-900">{{ patient.full_name }}</h1>
-                        <p class="text-sm text-gray-500">Patient ID: {{ patient.patient_id }}</p>
+                    <div class="min-w-0">
+                        <h1 class="text-lg sm:text-2xl font-bold text-gray-900 truncate">{{ patient.full_name }}</h1>
+                        <p class="text-xs sm:text-sm text-gray-500">Patient ID: {{ patient.patient_id }}</p>
                     </div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <button onclick="analyzeCurrentPatient()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+                    <button onclick="analyzeCurrentPatient()" class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 flex-1 sm:flex-initial">
+                        <svg class="h-4 w-4 sm:h-5 sm:w-5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                         </svg>
-                        New Analysis
+                        <span class="sm:inline">New Analysis</span>
                     </button>
-                    <button onclick="showEditModal()" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onclick="showEditModal()" class="inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-gray-300 text-xs sm:text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 flex-1 sm:flex-initial">
+                        <svg class="h-4 w-4 sm:h-5 sm:w-5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                         </svg>
-                        Edit
+                        <span class="sm:inline">Edit</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         <!-- Patient Info Card -->
-        <div class="bg-white shadow rounded-lg mb-8">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
-                    <svg class="h-5 w-5 mr-2 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white shadow rounded-lg mb-4 sm:mb-8">
+            <div class="px-4 py-4 sm:p-6">
+                <h3 class="text-base sm:text-lg leading-6 font-medium text-gray-900 mb-3 sm:mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
                     Patient Information
                 </h3>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+                <dl class="grid grid-cols-2 gap-x-4 gap-y-4 sm:gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Full Name</dt>
-                        <dd class="mt-1 text-sm font-medium text-gray-900">{{ patient.full_name }}</dd>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Full Name</dt>
+                        <dd class="mt-1 text-sm font-medium text-gray-900 truncate">{{ patient.full_name }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Patient ID</dt>
-                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ patient.patient_id }}</dd>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Patient ID</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono truncate">{{ patient.patient_id }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Age</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Age</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.age|default:patient.age_calculated|default:"Not specified" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Gender</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Gender</dt>
                         <dd class="mt-1 text-sm text-gray-900">
                             {% if patient.gender == 'F' %}Female{% elif patient.gender == 'M' %}Male{% else %}Other{% endif %}
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Phone</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.phone|default:"—" }}</dd>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Phone</dt>
+                        <dd class="mt-1 text-sm text-gray-900 truncate">{{ patient.phone|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Email</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ patient.email|default:"—" }}</dd>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900 truncate">{{ patient.email|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Date of Birth</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Date of Birth</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.date_of_birth|default:"—" }}</dd>
                     </div>
-                    <div class="sm:col-span-2 lg:col-span-4">
-                        <dt class="text-sm font-medium text-gray-500">Address</dt>
+                    <div class="sm:col-span-2 lg:col-span-4 col-span-2">
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Address</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.address|default:"—" }}</dd>
                     </div>
                 </dl>
@@ -143,17 +140,17 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
 
         <!-- Medical Information Card -->
-        <div class="bg-white shadow rounded-lg mb-8">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
-                    <svg class="h-5 w-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white shadow rounded-lg mb-4 sm:mb-8">
+            <div class="px-4 py-4 sm:p-6">
+                <h3 class="text-base sm:text-lg leading-6 font-medium text-gray-900 mb-3 sm:mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                     </svg>
                     Medical Information
                 </h3>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">HPV Status</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">HPV Status</dt>
                         <dd class="mt-1 text-sm">
                             {% if patient.hpv_status == 'positive' %}
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Positive</span>
@@ -165,11 +162,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Last Screening</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Last Screening</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.last_screening_date|default:"—" }}</dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Pregnancy Status</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Pregnancy Status</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ patient.get_pregnancy_status_display|default:"—" }}</dd>
                     </div>
                 </dl>
@@ -178,42 +175,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Medical History Card -->
         {% if patient.medical_history or patient.medications or patient.allergies or patient.family_history or patient.notes %}
-        <div class="bg-white shadow rounded-lg mb-8">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4 flex items-center">
-                    <svg class="h-5 w-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white shadow rounded-lg mb-4 sm:mb-8">
+            <div class="px-4 py-4 sm:p-6">
+                <h3 class="text-base sm:text-lg leading-6 font-medium text-gray-900 mb-3 sm:mb-4 flex items-center">
+                    <svg class="h-5 w-5 mr-2 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
                     Medical History
                 </h3>
-                <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:gap-y-6 sm:grid-cols-2">
                     {% if patient.medical_history %}
                     <div class="sm:col-span-2">
-                        <dt class="text-sm font-medium text-gray-500">Medical History</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Medical History</dt>
                         <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.medical_history }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.medications %}
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Current Medications</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Current Medications</dt>
                         <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.medications }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.allergies %}
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Allergies</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Allergies</dt>
                         <dd class="mt-1 text-sm text-gray-900 bg-red-50 p-3 rounded border border-red-100">{{ patient.allergies }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.family_history %}
                     <div class="sm:col-span-2">
-                        <dt class="text-sm font-medium text-gray-500">Family History</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Family History</dt>
                         <dd class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ patient.family_history }}</dd>
                     </div>
                     {% endif %}
                     {% if patient.notes %}
                     <div class="sm:col-span-2">
-                        <dt class="text-sm font-medium text-gray-500">Additional Notes</dt>
+                        <dt class="text-xs sm:text-sm font-medium text-gray-500">Additional Notes</dt>
                         <dd class="mt-1 text-sm text-gray-900 bg-yellow-50 p-3 rounded border border-yellow-100">{{ patient.notes }}</dd>
                     </div>
                     {% endif %}
@@ -224,23 +221,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Statistics -->
         {% if total_analyses > 0 %}
-        <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
+        <div class="grid grid-cols-1 gap-3 sm:gap-5 sm:grid-cols-3 mb-4 sm:mb-8">
             <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="px-4 py-5 sm:p-6">
-                    <dt class="text-sm font-medium text-gray-500 truncate">Latest Result</dt>
-                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ latest_analysis.predicted_label }}</dd>
+                <div class="px-4 py-4 sm:p-6">
+                    <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Latest Result</dt>
+                    <dd class="mt-1 text-lg sm:text-2xl font-semibold text-gray-900">{{ latest_analysis.predicted_label }}</dd>
                 </div>
             </div>
             <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="px-4 py-5 sm:p-6">
-                    <dt class="text-sm font-medium text-gray-500 truncate">Average Confidence</dt>
-                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ avg_confidence }}%</dd>
+                <div class="px-4 py-4 sm:p-6">
+                    <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Average Confidence</dt>
+                    <dd class="mt-1 text-lg sm:text-2xl font-semibold text-gray-900">{{ avg_confidence }}%</dd>
                 </div>
             </div>
             <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="px-4 py-5 sm:p-6">
-                    <dt class="text-sm font-medium text-gray-500 truncate">Total Analyses</dt>
-                    <dd class="mt-1 text-2xl font-semibold text-gray-900">{{ total_analyses }}</dd>
+                <div class="px-4 py-4 sm:p-6">
+                    <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Analyses</dt>
+                    <dd class="mt-1 text-lg sm:text-2xl font-semibold text-gray-900">{{ total_analyses }}</dd>
                 </div>
             </div>
         </div>
@@ -248,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Risk Trend Chart -->
         {% if total_analyses > 1 %}
-        <div class="bg-white shadow rounded-lg mb-8 p-5">
+        <div class="bg-white shadow rounded-lg mb-4 sm:mb-8 p-4 sm:p-5">
           <h3 class="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
             <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
@@ -256,13 +253,15 @@ document.addEventListener('DOMContentLoaded', function() {
             Risk Stage Trend
           </h3>
           <p class="text-xs text-gray-400 mb-4">Patient's predicted stage across all screenings (oldest → newest)</p>
-          <canvas id="riskTrendChart" style="max-height:200px"></canvas>
+          <div class="overflow-x-auto">
+            <canvas id="riskTrendChart" style="max-height:200px"></canvas>
+          </div>
         </div>
         {% endif %}
 
         <!-- Clinical Notes -->
-        <div id="notes" class="bg-white shadow rounded-lg mb-8">
-          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div id="notes" class="bg-white shadow rounded-lg mb-4 sm:mb-8">
+          <div class="px-4 py-3 sm:px-5 sm:py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 class="text-base font-semibold text-gray-900 flex items-center gap-2">
               <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -273,16 +272,16 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
 
           <!-- Add note form -->
-          <div class="px-5 py-4 border-b border-gray-100 bg-gray-50">
+          <div class="px-4 py-3 sm:px-5 sm:py-4 border-b border-gray-100 bg-gray-50">
             <form method="post" action="/patient/{{ patient.patient_id }}/notes/add/">
               {% csrf_token %}
               <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Add Note</label>
               <textarea name="note" rows="3" placeholder="Enter clinical observation, follow-up plan, or visit notes..."
                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"></textarea>
-              <div class="flex items-center justify-between mt-2">
-                <span class="text-xs text-gray-400">Visible to all clinical staff</span>
+              <div class="flex items-center justify-between mt-2 gap-2">
+                <span class="text-xs text-gray-400 hidden sm:inline">Visible to all clinical staff</span>
                 <button type="submit"
-                  class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+                  class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors ml-auto">
                   <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                   </svg>
@@ -296,14 +295,14 @@ document.addEventListener('DOMContentLoaded', function() {
           {% if clinical_notes %}
           <div class="divide-y divide-gray-50">
             {% for cn in clinical_notes %}
-            <div class="px-5 py-4">
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex items-center gap-2 shrink-0">
-                  <div class="h-7 w-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700">
+            <div class="px-4 py-3 sm:px-5 sm:py-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-2 shrink-0 min-w-0">
+                  <div class="h-7 w-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 flex-shrink-0">
                     {{ cn.created_by.get_full_name|default:cn.created_by.username|first|upper }}
                   </div>
-                  <div>
-                    <p class="text-xs font-semibold text-gray-800">{{ cn.created_by.get_full_name|default:cn.created_by.username }}</p>
+                  <div class="min-w-0">
+                    <p class="text-xs font-semibold text-gray-800 truncate">{{ cn.created_by.get_full_name|default:cn.created_by.username }}</p>
                     <p class="text-xs text-gray-400">{{ cn.created_by.profile.get_role_display }}</p>
                   </div>
                 </div>
@@ -337,35 +336,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <!-- Analysis History -->
         <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Analysis History</h3>
-                    <form method="get" class="flex flex-wrap items-center gap-2">
-                        <input type="date" name="date_from" value="{{ date_from }}"
-                               class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        <span class="text-sm text-gray-500">to</span>
-                        <input type="date" name="date_to" value="{{ date_to }}"
-                               class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">Filter</button>
-                        {% if date_from or date_to %}
-                        <a href="?" class="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-200">Clear</a>
-                        {% endif %}
+            <div class="px-4 py-4 sm:p-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 mb-4">
+                    <h3 class="text-base sm:text-lg leading-6 font-medium text-gray-900">Analysis History</h3>
+                    <form method="get" class="flex flex-col xs:flex-row flex-wrap items-stretch xs:items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="date" name="date_from" value="{{ date_from }}"
+                                   class="text-sm border border-gray-300 rounded-md px-2 py-1.5 flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <span class="text-sm text-gray-500">to</span>
+                            <input type="date" name="date_to" value="{{ date_to }}"
+                                   class="text-sm border border-gray-300 rounded-md px-2 py-1.5 flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 flex-1">Filter</button>
+                            {% if date_from or date_to %}
+                            <a href="?" class="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-md hover:bg-gray-200">Clear</a>
+                            {% endif %}
+                        </div>
                     </form>
                 </div>
                 {% if analyses %}
-                <div class="space-y-4">
+                <div class="space-y-3 sm:space-y-4">
                     {% for analysis in analyses %}
-                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="location.href='/analysis/{{ analysis.analysis_id }}'">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-4">
-                                <div class="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                    <svg class="h-6 w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="location.href='/analysis/{{ analysis.analysis_id }}'">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="flex items-center space-x-3 sm:space-x-4 min-w-0">
+                                <div class="h-10 w-10 sm:h-12 sm:w-12 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                     </svg>
                                 </div>
-                                <div>
-                                    <div class="flex items-center space-x-2">
-                                        <h4 class="text-lg font-medium text-gray-900">{{ analysis.predicted_label }}</h4>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center flex-wrap gap-2">
+                                        <h4 class="text-base sm:text-lg font-medium text-gray-900">{{ analysis.predicted_label }}</h4>
                                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
                                             {% if analysis.predicted_class == 0 %}bg-green-100 text-green-800
                                             {% elif analysis.predicted_class == 1 %}bg-lime-100 text-lime-800
@@ -378,23 +381,23 @@ document.addEventListener('DOMContentLoaded', function() {
                                             EfficientNet-B3
                                         </span>
                                     </div>
-                                    <p class="text-sm text-gray-500">{{ analysis.created_at|date:"F d, Y H:i" }}</p>
+                                    <p class="text-xs sm:text-sm text-gray-500 mt-0.5">{{ analysis.created_at|date:"F d, Y H:i" }}</p>
                                 </div>
                             </div>
-                            <div class="text-right">
-                                <div class="text-2xl font-bold text-indigo-600">{{ analysis.confidence_pct|floatformat:0 }}%</div>
-                                <div class="text-sm text-gray-500">Confidence</div>
+                            <div class="text-left sm:text-right flex sm:flex-col items-center sm:items-end gap-1 sm:gap-0 flex-shrink-0">
+                                <div class="text-xl sm:text-2xl font-bold text-indigo-600">{{ analysis.confidence_pct|floatformat:0 }}%</div>
+                                <div class="text-xs sm:text-sm text-gray-500">Confidence</div>
                             </div>
                         </div>
-                        <div class="mt-4">
+                        <div class="mt-3 sm:mt-4">
                             <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
                                 <span>Additional Details</span>
-                                <a href="/analysis/{{ analysis.analysis_id }}" class="text-indigo-600 hover:text-indigo-900">View Full Report →</a>
+                                <a href="/analysis/{{ analysis.analysis_id }}" class="text-indigo-600 hover:text-indigo-900 text-xs sm:text-sm">View Full Report →</a>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-2 gap-2 sm:gap-3">
                                 <div class="bg-blue-50 rounded-lg p-2 border border-blue-100">
                                     <p class="text-xs text-blue-600 font-semibold">Confidence Level</p>
-                                    <p class="text-sm font-bold text-blue-900">{{ analysis.confidence_level }}</p>
+                                    <p class="text-sm font-bold text-blue-900 truncate">{{ analysis.confidence_level }}</p>
                                 </div>
                                 <div class="bg-amber-50 rounded-lg p-2 border border-amber-100">
                                     <p class="text-xs text-amber-600 font-semibold">Risk Score</p>
@@ -402,13 +405,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                             {% if analysis.recommendation %}
-                            <div class="mt-3 p-3 bg-green-50 rounded-lg border border-green-100">
+                            <div class="mt-2 sm:mt-3 p-3 bg-green-50 rounded-lg border border-green-100">
                                 <p class="text-xs text-green-600 font-semibold mb-1">Screening Recommendation</p>
                                 <p class="text-sm text-green-800">{{ analysis.recommendation|truncatechars:100 }}</p>
                             </div>
                             {% endif %}
                             {% if analysis.recommended_checkups %}
-                            <div class="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <div class="mt-2 sm:mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
                                 <p class="text-xs text-indigo-600 font-semibold mb-2">Patient Checkups Sent</p>
                                 <div class="flex flex-wrap gap-1.5">
                                     {% for checkup in analysis.recommended_checkups %}
@@ -420,12 +423,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                             </div>
                             {% endif %}
-                        </div>
-                            <div class="grid grid-cols-5 gap-2">
+                            <div class="mt-3 grid grid-cols-5 gap-1 sm:gap-2">
                                 {% for label, prob_pct in analysis.probabilities_pct.items %}
-                                <div class="text-center">
-                                    <div class="text-xs text-gray-500 truncate">{{ label }}</div>
-                                    <div class="font-semibold text-gray-900">{{ prob_pct|floatformat:0 }}%</div>
+                                <div class="text-center min-w-0">
+                                    <div class="text-[10px] sm:text-xs text-gray-500 truncate">{{ label }}</div>
+                                    <div class="font-semibold text-gray-900 text-xs sm:text-sm">{{ prob_pct|floatformat:0 }}%</div>
                                 </div>
                                 {% endfor %}
                             </div>
@@ -437,8 +439,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% include 'includes/pagination.html' with page_obj=analyses extra_params=extra_params %}
                 {% endwith %}
                 {% else %}
-                <div class="text-center py-12">
-                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="text-center py-8 sm:py-12">
+                    <svg class="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                     <h3 class="mt-2 text-sm font-medium text-gray-900">No analyses</h3>
@@ -457,8 +459,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Edit Patient Modal -->
 <div id="editModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
+    <div class="relative top-0 sm:top-10 mx-auto p-3 sm:p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white min-h-screen sm:min-h-0 sm:max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4 sticky top-0 bg-white pt-1 pb-3 z-10">
             <h3 class="text-lg font-medium text-gray-900">Edit Patient</h3>
             <button onclick="hideEditModal()" class="text-gray-400 hover:text-gray-600">
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -472,7 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <!-- Basic Information -->
             <div>
                 <h4 class="text-sm font-medium text-gray-900 mb-3">Basic Information</h4>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">First Name *</label>
                         <input type="text" name="first_name" value="{{ patient.first_name }}" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
@@ -483,7 +485,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Date of Birth</label>
-                        <input type="date" name="date_of_birth" value="{% if patient.date_of_birth %}{{ patient.date_of_bound|date:'Y-m-d' }}{% endif %}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <input type="date" name="date_of_birth" value="{% if patient.date_of_birth %}{{ patient.date_of_birth|date:'Y-m-d' }}{% endif %}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Age</label>
@@ -502,11 +504,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         <label class="block text-sm font-medium text-gray-700">Phone</label>
                         <input type="text" name="phone" value="{{ patient.phone|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     </div>
-                    <div class="col-span-2">
+                    <div class="sm:col-span-2">
                         <label class="block text-sm font-medium text-gray-700">Email</label>
                         <input type="email" name="email" value="{{ patient.email|default:'' }}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     </div>
-                    <div class="col-span-2">
+                    <div class="sm:col-span-2">
                         <label class="block text-sm font-medium text-gray-700">Address</label>
                         <textarea name="address" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ patient.address|default:'' }}</textarea>
                     </div>
@@ -516,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <!-- Medical Information -->
             <div>
                 <h4 class="text-sm font-medium text-gray-900 mb-3">Medical Information</h4>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">HPV Status</label>
                         <select name="hpv_status" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
@@ -567,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
 
-            <div class="flex justify-end space-x-3 pt-4 border-t">
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-4 border-t sticky bottom-0 bg-white pb-2">
                 <button type="button" onclick="hideEditModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
                 <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700">Save Changes</button>
             </div>
@@ -590,6 +592,11 @@ function hideEditModal() {
     document.getElementById('editModal').classList.add('hidden');
     document.body.style.overflow = 'auto';
 }
+
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e) {
+    if (e.target === this) hideEditModal();
+});
 
 // ── Risk Trend Chart ────────────────────────────────────────────────────────
 {% if total_analyses > 1 %}
@@ -619,6 +626,7 @@ function hideEditModal() {
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -633,12 +641,12 @@ function hideEditModal() {
           ticks: {
             stepSize: 1,
             callback: v => labelMap[v] || v,
-            font: { size: 10 },
+            font: { size: window.innerWidth < 640 ? 9 : 10 },
           },
           grid: { color: '#f1f5f9' },
         },
         x: {
-          ticks: { font: { size: 10 }, maxRotation: 40 },
+          ticks: { font: { size: window.innerWidth < 640 ? 9 : 10 }, maxRotation: 45 },
           grid: { display: false },
         },
       },

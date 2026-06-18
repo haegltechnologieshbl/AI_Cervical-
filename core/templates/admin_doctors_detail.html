@@ -48,7 +48,12 @@
                         <div class="flex justify-between">
                             <span class="text-sm text-gray-500">Role:</span>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {{ target_user.profile.role|title }}
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium
+                                    {% if user.profile.role == 'admin' %}bg-purple-100 text-purple-800
+                                    {% elif user.profile.role == 'user' %}bg-green-100 text-green-800
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {% if user.profile.role == 'user' %}Doctor{% else %}{{ user.profile.role|title }}{% endif %}
+                                </span>
                             </span>
                         </div>
                         {% if target_user.profile.department %}

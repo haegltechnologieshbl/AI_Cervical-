@@ -95,8 +95,8 @@
           {% endif %}
         </div>
 
-        <!-- Right side -->
-        <div class="flex items-center space-x-4">
+        <!-- Mobile menu button & User Menu -->
+        <div class="flex items-center space-x-3">
           {% if request.user.is_authenticated %}
           <!-- User Menu (shown only when logged in) -->
           <div class="relative">
@@ -149,16 +149,14 @@
           </a>
           {% endif %}
 
-          
-        </div>
-
-        <!-- Mobile menu button -->
-        <div class="md:hidden">
-          <button onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900">
-            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-            </svg>
-          </button>
+          <!-- Mobile menu button (3-line toggle) -->
+          <div class="md:hidden">
+            <button onclick="toggleMobileMenu()" class="text-gray-600 hover:text-gray-900">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

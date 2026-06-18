@@ -108,7 +108,7 @@
                                     </a>
 
                                     <!-- Delete -->
-                                    <form method="post" action="/admin/users/" onsubmit="return confirmDelete('{{ user.get_full_name|default:user.username }}')">
+                                    <form method="post" action="/admin/doctors/" onsubmit="return confirmDelete('{{ user.get_full_name|default:user.username }}')">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="user_id" value="{{ user.id }}">

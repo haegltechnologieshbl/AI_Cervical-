@@ -705,21 +705,32 @@ class HospitalDashboardStatsView(APIView):
 
         monthly_detection_rate = (month_positive / month_screened * 100) if month_screened > 0 else 0
 
-        # Patient registrations by day for the last 30 days
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        registrations_by_day_query = patient_queryset.filter(
-            created_at__gte=thirty_days_ago
-        ).annotate(
-            day=TruncDate('created_at')
-        ).values('day').annotate(
-            count=Count('patient_id')
-        ).order_by('day')
+        # Replace this block in HospitalDashboardStatsView:
 
-        # Convert to dict with date strings as keys
+
+# AND ALSO REMOVE the second duplicate block with tzinfo
+
+        # REPLACE WITH this single block:
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        recent_patient_dates = patient_queryset.filter(
+            created_at__gte=thirty_days_ago
+        ).values_list('created_at', flat=True)
+
         registrations_by_day = {}
-        for item in registrations_by_day_query:
-            if item['day'] is not None:
-                registrations_by_day[item['day'].strftime('%b %d')] = item['count']
+        for created_at in recent_patient_dates:
+            if created_at is not None:
+                key = timezone.localtime(created_at).date().strftime('%b %d')
+                registrations_by_day[key] = registrations_by_day.get(key, 0) + 1
+
+        from datetime import datetime as dt
+        current_year = timezone.now().year
+        try:
+            registrations_by_day = dict(sorted(
+                registrations_by_day.items(),
+                key=lambda x: dt.strptime(f"{x[0]} {current_year}", '%b %d %Y')
+            ))
+        except Exception:
+            pass
 
         # Calculate registrations in last 7 days
         seven_days_ago = timezone.now() - timedelta(days=7)
@@ -761,6 +772,9 @@ class HospitalDashboardStatsView(APIView):
 
 
 # Rename the API detail view to avoid conflict
+
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class AnalysisApiDetailView(APIView):
     """GET/PATCH /v1/analyze/<analysis_id> - API endpoint for analysis details"""
@@ -1890,7 +1904,7 @@ class AdminDashboardView(View):
         is_admin = user_role == 'admin' or request.user.is_superuser
 
         if is_admin:
-            user_role = 'admin' # Ensure template sees admin
+            user_role = 'admin'
             total_users = User.objects.count()
             total_analyses = Analysis.objects.count()
 
@@ -1907,9 +1921,47 @@ class AdminDashboardView(View):
                 'created_by', 'created_by__profile', 'patient'
             ).order_by('-created_at')[:20]
 
-            recent_user_registrations = User.objects.select_related('profile').exclude(
-                profile__role='admin'
+            # Separate recent registrations by role
+            recent_doctor_registrations = User.objects.select_related('profile').filter(
+                profile__role='user',
+                is_superuser=False
             ).order_by('-date_joined')[:10]
+
+            recent_technician_registrations = User.objects.select_related('profile').filter(
+                profile__role='senior_technician',
+                is_superuser=False
+            ).order_by('-date_joined')[:10]
+
+            # Count stats
+            total_doctors = User.objects.filter(
+                profile__role='user',
+                is_superuser=False
+            ).count()
+
+            total_technicians = User.objects.filter(
+                profile__role='senior_technician',
+                is_superuser=False
+            ).count()
+
+            total_patients_registered = Patient.objects.count()
+
+            # New this month
+            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            new_doctors_month = User.objects.filter(
+                profile__role='user',
+                is_superuser=False,
+                date_joined__gte=month_start
+            ).count()
+
+            new_technicians_month = User.objects.filter(
+                profile__role='senior_technician',
+                is_superuser=False,
+                date_joined__gte=month_start
+            ).count()
+
+            new_patients_month = Patient.objects.filter(
+                created_at__gte=month_start
+            ).count()
 
             # Get recent patients for dashboard
             recent_patients = Patient.objects.select_related(
@@ -1922,8 +1974,15 @@ class AdminDashboardView(View):
                 'recent_users': recent_users,
                 'role_dist': list(role_dist),
                 'recent_analyses': recent_analyses,
-                'recent_user_registrations': recent_user_registrations,
+                'recent_doctor_registrations': recent_doctor_registrations,
+                'recent_technician_registrations': recent_technician_registrations,
                 'recent_patients': recent_patients,
+                'total_doctors': total_doctors,
+                'total_technicians': total_technicians,
+                'total_patients_registered': total_patients_registered,
+                'new_doctors_month': new_doctors_month,
+                'new_technicians_month': new_technicians_month,
+                'new_patients_month': new_patients_month,
                 'user_role': 'admin',
             }
         else:
@@ -1991,7 +2050,8 @@ class AddDoctorView(View):
             return redirect('/login/?next=/admin/doctor/add')
 
         # Only admins can add doctors
-        if request.user.profile.role != 'admin':
+        # With this:
+        if not request.user.is_superuser and request.user.profile.role != 'admin':
             messages.error(request, 'Only administrators can add doctors.')
             return redirect('/admin/doctors/')
 
@@ -2002,7 +2062,7 @@ class AddDoctorView(View):
             return redirect('/login/')
 
         # Only admins can add doctors
-        if request.user.profile.role != 'admin':
+        if not request.user.is_superuser and request.user.profile.role != 'admin':
             messages.error(request, 'Only administrators can add doctors.')
             return redirect('/admin/doctors/')
 
@@ -2293,7 +2353,7 @@ class AdminDoctorsDetailView(View):
             return redirect('/login/?next=/admin/doctors/' + str(user_id))
 
         # Only allow admins to view doctor details
-        if request.user.profile.role != 'admin':
+        if not request.user.is_superuser and request.user.profile.role != 'admin':
             return redirect('/admin/')
 
         target_user = get_object_or_404(User, pk=user_id)

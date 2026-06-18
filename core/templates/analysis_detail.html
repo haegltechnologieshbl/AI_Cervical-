@@ -1,37 +1,52 @@
 {% extends "user_base.html" %}
+
 {% block title %}Analysis Results - {{ analysis.predicted_label }}{% endblock %}
 
 {% block content %}
 {% with cls=analysis.predicted_class %}
-<div class="min-h-screen bg-gray-50">
+<style>
+  /* Hide scrollbar for horizontal scrolling elements if needed in the future */
+  .no-scrollbar::-webkit-scrollbar {
+      display: none;
+  }
+  .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+  }
+</style>
+
+<div class="min-h-screen bg-gray-50 pb-20">
 
   <!-- ── Header ── -->
-  <div class="bg-white border-b border-gray-200">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-      <div class="flex items-center gap-4">
-        <button onclick="history.back()" class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+  <div class="bg-white border-b border-gray-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <button onclick="history.back()" class="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors -ml-2">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
           </svg>
         </button>
         <div>
-          <h1 class="text-xl font-bold text-gray-900">Analysis Results</h1>
+          <h1 class="text-lg sm:text-xl font-bold text-gray-900 truncate max-w-[200px] sm:max-w-none">Analysis Results</h1>
           <p class="text-xs text-gray-400 font-mono mt-0.5">{{ analysis.analysis_id }}</p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <span class="text-sm text-gray-500">{{ analysis.created_at|date:"M d, Y · H:i" }}</span>
-        <button onclick="downloadReport()" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+
+      <div class="flex items-center justify-between w-full sm:w-auto gap-3 sm:gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100">
+        <span class="text-xs sm:text-sm text-gray-500 whitespace-nowrap">{{ analysis.created_at|date:"M d, Y · H:i" }}</span>
+        <button onclick="downloadReport()" class="shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-lg transition-colors shadow-sm active:scale-95">
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            <path stroke-linecap="turn" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
-          Download PDF
+          <span class="hidden sm:inline">Download PDF</span>
+          <span class="sm:hidden">PDF</span>
         </button>
       </div>
     </div>
   </div>
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-5">
 
     <!-- ── Patient + Result Hero Card ── -->
     <div class="rounded-2xl overflow-hidden shadow-md border border-white
@@ -42,32 +57,32 @@
       {% else %}bg-gradient-to-br from-red-600 to-red-700{% endif %}">
 
       <!-- Top row: patient + result -->
-      <div class="px-6 py-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+      <div class="px-4 sm:px-6 py-6 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 items-center text-center md:text-left">
 
         <!-- Patient -->
-        <div class="flex items-center gap-4">
-          <div class="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
-            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 md:justify-start">
+          <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
             </svg>
           </div>
-          <div>
+          <div class="min-w-0">
             {% if analysis.patient %}
-            <p class="text-white/70 text-xs uppercase tracking-wide font-semibold">Patient</p>
-            <p class="text-white text-lg font-bold leading-tight">{{ analysis.patient.full_name }}</p>
-            <p class="text-white/70 text-sm mt-0.5">Age {{ analysis.patient.age|default:"—" }} · {{ analysis.patient.get_hpv_status_display|default:"HPV unknown" }}</p>
+            <p class="text-white/70 text-[10px] sm:text-xs uppercase tracking-wide font-semibold">Patient</p>
+            <p class="text-white text-base sm:text-lg font-bold leading-tight truncate">{{ analysis.patient.full_name }}</p>
+            <p class="text-white/70 text-xs sm:text-sm mt-0.5">Age {{ analysis.patient.age|default:"—" }} · {{ analysis.patient.get_hpv_status_display|default:"HPV unknown" }}</p>
             {% else %}
-            <p class="text-white/70 text-xs uppercase tracking-wide font-semibold">Patient</p>
-            <p class="text-white text-lg font-bold">No patient linked</p>
+            <p class="text-white/70 text-[10px] sm:text-xs uppercase tracking-wide font-semibold">Patient</p>
+            <p class="text-white text-base sm:text-lg font-bold">No patient linked</p>
             {% endif %}
           </div>
         </div>
 
         <!-- Result (center, largest) -->
-        <div class="text-center">
-          <p class="text-white/70 text-xs uppercase tracking-wide font-semibold mb-1">AI Staging Result</p>
-          <h2 class="text-white text-2xl font-black leading-tight" id="resultTitle">{{ analysis.predicted_label }}</h2>
-          <p class="text-white/80 text-sm mt-1" id="resultDescription">
+        <div class="py-2">
+          <p class="text-white/70 text-[10px] sm:text-xs uppercase tracking-wide font-semibold mb-1">AI Staging Result</p>
+          <h2 class="text-white text-3xl sm:text-2xl font-black leading-tight tracking-tight" id="resultTitle">{{ analysis.predicted_label }}</h2>
+          <p class="text-white/80 text-xs sm:text-sm mt-1" id="resultDescription">
             {% if cls == 0 %}Negative for Intraepithelial Lesion or Malignancy
             {% elif cls == 1 %}Atypical Squamous Cells of Undetermined Significance
             {% elif cls == 2 %}Low-Grade Squamous Intraepithelial Lesion
@@ -77,28 +92,28 @@
         </div>
 
         <!-- Confidence metrics -->
-        <div class="flex flex-col gap-3 md:items-end">
-          <div class="bg-white/15 rounded-xl px-5 py-3 text-center min-w-[120px]" id="confidenceBox">
-            <p class="text-white/70 text-xs uppercase tracking-wide">Confidence</p>
-            <p class="text-white text-4xl font-black" id="confidenceValue">{{ confidence_pct }}<span class="text-xl">%</span></p>
-            <p class="text-white/70 text-xs mt-0.5">{{ analysis.confidence_level }}</p>
+        <div class="flex flex-col gap-2 sm:gap-3 md:items-center items-center">
+          <div class="bg-white/15 rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 text-center w-full max-w-[160px]" id="confidenceBox">
+            <p class="text-white/70 text-[10px] sm:text-xs uppercase tracking-wide">Confidence</p>
+            <p class="text-white text-3xl sm:text-4xl font-black" id="confidenceValue">{{ confidence_pct }}<span class="text-base sm:text-xl">%</span></p>
+            <p class="text-white/70 text-[10px] sm:text-xs mt-0.5">{{ analysis.confidence_level }}</p>
           </div>
-          <div class="bg-white/10 rounded-lg px-4 py-2 text-center">
-            <p class="text-white/60 text-xs">Images Analyzed</p>
-            <p class="text-white font-bold text-lg">{% if is_batch %}{{ batch_analyses|length }}{% else %}1{% endif %}</p>
+          <div class="bg-white/10 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-center w-full max-w-[160px]">
+            <p class="text-white/60 text-[10px] uppercase">Images</p>
+            <p class="text-white font-bold text-base sm:text-lg">{% if is_batch %}{{ batch_analyses|length }}{% else %}1{% endif %}</p>
           </div>
         </div>
       </div>
 
       <!-- Stage Progression Bar -->
-      <div class="px-6 pb-5">
-        <p class="text-white/60 text-xs uppercase tracking-widest font-semibold mb-3">Cervical Stage Scale</p>
+      <div class="px-4 sm:px-6 pb-5">
+        <p class="text-white/60 text-[10px] uppercase tracking-widest font-semibold mb-2 text-center md:text-left">Cervical Stage Scale</p>
         <div class="flex items-stretch gap-1" id="stageScale">
           {% for stage_info in stage_scale %}
-          <div class="flex-1 rounded-lg px-2 py-2.5 text-center transition-all
+          <div class="flex-1 rounded-lg px-1 sm:px-2 py-2 sm:py-2.5 text-center transition-all
             {% if forloop.counter0 == cls %}ring-2 ring-white bg-white/30 scale-y-105{% else %}bg-white/10{% endif %}">
-            <p class="font-black text-white text-sm">{{ forloop.counter0 }}</p>
-            <p class="text-white/80 text-xs font-semibold leading-tight mt-0.5">{{ stage_info.short }}</p>
+            <p class="font-black text-white text-xs sm:text-sm">{{ forloop.counter0 }}</p>
+            <p class="text-white/80 text-[9px] sm:text-xs font-semibold leading-tight mt-0.5 hidden sm:block">{{ stage_info.short }}</p>
           </div>
           {% endfor %}
         </div>
@@ -107,55 +122,56 @@
 
     <!-- ── Batch Summary (if batch) ── -->
     {% if is_batch and batch_data %}
-    <div class="bg-blue-700 text-white rounded-2xl p-5 shadow">
-      <div class="flex items-center gap-3 mb-3">
-        <span class="px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wide">Batch Analysis</span>
-        <span class="text-white/70 text-sm">Averaged from {{ batch_data.images_analyzed }} images</span>
+    <div class="bg-blue-700 text-white rounded-2xl p-4 sm:p-5 shadow">
+      <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-3">
+        <span class="px-3 py-1 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-wide">Batch Analysis</span>
+        <span class="text-white/70 text-xs sm:text-sm text-center sm:text-left">Averaged from {{ batch_data.images_analyzed }} images</span>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="bg-white/10 rounded-xl p-3 text-center">
-          <p class="text-white/60 text-xs uppercase">Total Images</p>
-          <p class="text-2xl font-bold text-white">{{ batch_data.images_total }}</p>
+          <p class="text-white/60 text-[10px] uppercase">Total Images</p>
+          <p class="text-xl sm:text-2xl font-bold text-white">{{ batch_data.images_total }}</p>
         </div>
         <div class="bg-white/10 rounded-xl p-3 text-center">
-          <p class="text-white/60 text-xs uppercase">Analyzed</p>
-          <p class="text-2xl font-bold text-white">{{ batch_data.images_analyzed }}</p>
+          <p class="text-white/60 text-[10px] uppercase">Analyzed</p>
+          <p class="text-xl sm:text-2xl font-bold text-white">{{ batch_data.images_analyzed }}</p>
         </div>
         <div class="bg-white/10 rounded-xl p-3 text-center">
-          <p class="text-white/60 text-xs uppercase">Avg Confidence</p>
-          <p class="text-2xl font-bold text-white">{{ batch_data.averaged_prediction.confidence_pct|floatformat:0 }}%</p>
+          <p class="text-white/60 text-[10px] uppercase">Avg Confidence</p>
+          <p class="text-xl sm:text-2xl font-bold text-white">{{ batch_data.averaged_prediction.confidence_pct|floatformat:0 }}%</p>
         </div>
         <div class="bg-white/10 rounded-xl p-3 text-center">
-          <p class="text-white/60 text-xs uppercase">Risk Level</p>
-          <p class="text-lg font-bold text-white">{{ batch_data.averaged_prediction.risk_level|default:"—" }}</p>
+          <p class="text-white/60 text-[10px] uppercase">Risk Level</p>
+          <p class="text-base sm:text-lg font-bold text-white">{{ batch_data.averaged_prediction.risk_level|default:"—" }}</p>
         </div>
       </div>
     </div>
 
     <!-- Batch image thumbnails -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100">
-        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Individual Image Results</h3>
+      <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
+        <h3 class="text-xs sm:text-sm font-bold text-gray-700 uppercase tracking-wide">Individual Image Results</h3>
       </div>
-      <div class="p-5">
-        <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-{% if batch_analyses|length > 5 %}6{% else %}5{% endif %} gap-3">
+      <div class="p-4 sm:p-5">
+        <!-- Grid cols-2 on mobile for larger touch targets, col-3 on tablet, col-5 on desktop -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-3">
           {% for ba in batch_analyses %}
           <div onclick="selectBatchImage({{ forloop.counter0 }})" class="cursor-pointer rounded-xl overflow-hidden border-2 transition-all batch-card
             {% if forloop.first %}ring-2 ring-offset-1 ring-indigo-500 border-indigo-300{% else %}border-gray-200 hover:border-indigo-300{% endif %}">
             {% if ba.image %}
-            <img src="{{ ba.image.url }}" alt="Image {{ ba.batch_position }}" class="w-full h-20 object-cover">
+            <img src="{{ ba.image.url }}" alt="Image {{ ba.batch_position }}" class="w-full h-24 sm:h-20 object-cover">
             {% else %}
-            <div class="w-full h-20 bg-gray-100 flex items-center justify-center">
+            <div class="w-full h-24 sm:h-20 bg-gray-100 flex items-center justify-center">
               <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             </div>
             {% endif %}
-            <div class="px-2 py-1.5 text-center
+            <div class="px-2 py-2 text-center
               {% if ba.predicted_class == 0 %}bg-green-50{% elif ba.predicted_class == 1 %}bg-lime-50{% elif ba.predicted_class == 2 %}bg-yellow-50{% elif ba.predicted_class == 3 %}bg-orange-50{% else %}bg-red-50{% endif %}">
-              <p class="text-xs font-bold
+              <p class="text-[10px] sm:text-xs font-bold uppercase leading-tight truncate
                 {% if ba.predicted_class == 0 %}text-green-700{% elif ba.predicted_class == 1 %}text-lime-700{% elif ba.predicted_class == 2 %}text-yellow-700{% elif ba.predicted_class == 3 %}text-orange-700{% else %}text-red-700{% endif %}">
                 {{ ba.predicted_label }}
               </p>
-              <p class="text-xs text-gray-500">{{ ba.confidence_pct|floatformat:0 }}%</p>
+              <p class="text-[10px] sm:text-xs text-gray-500 mt-0.5">{{ ba.confidence_pct|floatformat:0 }}%</p>
             </div>
           </div>
           {% endfor %}
@@ -165,17 +181,17 @@
     {% endif %}
 
     <!-- ── Image + Probabilities ── -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
 
       <!-- Uploaded Image -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+        <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
           <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Analyzed Image</h3>
+          <h3 class="text-xs sm:text-sm font-bold text-gray-700 uppercase tracking-wide">Analyzed Image</h3>
         </div>
-        <div class="p-4 bg-gray-50 flex items-center justify-center min-h-[260px]">
+        <div class="p-3 sm:p-4 bg-gray-50 flex items-center justify-center min-h-[250px] sm:min-h-[260px]">
           {% if analysis.image %}
-          <img id="uploadedImage" src="{{ analysis.image.url }}" alt="Analysis Image" class="max-w-full max-h-72 object-contain rounded-xl shadow-sm">
+          <img id="uploadedImage" src="{{ analysis.image.url }}" alt="Analysis Image" class="max-w-full max-h-[300px] sm:max-h-72 object-contain rounded-xl shadow-sm">
           {% else %}
           <div class="text-center text-gray-400 py-12">
             <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,34 +205,35 @@
 
       <!-- Class Probabilities -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+        <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
           <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Classification Probabilities</h3>
+          <h3 class="text-xs sm:text-sm font-bold text-gray-700 uppercase tracking-wide">Classification Probabilities</h3>
         </div>
-        <div class="p-5 space-y-4" id="classProbabilities">
+        <div class="p-4 sm:p-5 space-y-3 sm:space-y-4" id="classProbabilities">
           {% for label, prob in probabilities.items %}
           {% with idx=forloop.counter0 %}
-          <div class="flex items-center gap-3">
-            <div class="w-28 flex-shrink-0">
-              <p class="text-xs font-semibold text-gray-600 leading-tight">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <!-- Changed w-28 to min-w-[90px] to prevent overflow on small screens -->
+            <div class="min-w-[90px] sm:w-28 flex-shrink-0">
+              <p class="text-[10px] sm:text-xs font-semibold text-gray-600 leading-tight">
                 {% if idx == 0 %}Normal – NILM
                 {% elif idx == 1 %}ASC-US
                 {% elif idx == 2 %}LSIL
                 {% elif idx == 3 %}HSIL
                 {% else %}Carcinoma{% endif %}
               </p>
-              <p class="text-xs text-gray-400">Class {{ idx }}</p>
+              <p class="text-[10px] text-gray-400">Class {{ idx }}</p>
             </div>
-            <div class="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+            <div class="flex-1 h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
               <div class="h-full rounded-full transition-all duration-700
                 {% if idx == 0 %}bg-green-500{% elif idx == 1 %}bg-lime-500{% elif idx == 2 %}bg-yellow-500{% elif idx == 3 %}bg-orange-500{% else %}bg-red-500{% endif %}"
                 style="width: {{ prob }}%"></div>
             </div>
-            <span class="w-14 text-right text-sm font-bold
+            <span class="w-12 sm:w-14 text-right text-xs sm:text-sm font-bold
               {% if idx == 0 %}text-green-600{% elif idx == 1 %}text-lime-600{% elif idx == 2 %}text-yellow-600{% elif idx == 3 %}text-orange-600{% else %}text-red-600{% endif %}">
               {{ prob|floatformat:1 }}%
             </span>
-            {% if forloop.counter0 == cls %}<span class="text-xs bg-gray-800 text-white px-2 py-0.5 rounded-full font-semibold flex-shrink-0">AI Pick</span>{% endif %}
+            {% if forloop.counter0 == cls %}<span class="text-[10px] bg-gray-800 text-white px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 hidden sm:inline-block">AI Pick</span>{% endif %}
           </div>
           {% endwith %}
           {% endfor %}
@@ -228,73 +245,73 @@
     {% if analysis.patient %}
     {% with p=analysis.patient %}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-          <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Patient Information</h3>
+          <h3 class="text-xs sm:text-sm font-bold text-gray-700 uppercase tracking-wide">Patient Information</h3>
         </div>
         <a href="/patient/{{ p.patient_id }}" class="text-xs text-blue-600 font-semibold hover:underline flex items-center gap-1">View full profile →</a>
       </div>
-      <div class="p-5 space-y-5">
+      <div class="p-4 sm:p-5 space-y-4 sm:space-y-5">
 
         <!-- Basic Info -->
         <div>
-          <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Basic Information</p>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <p class="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Basic Information</p>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <div>
-              <p class="text-xs text-gray-400 uppercase">Full Name</p>
-              <p class="font-semibold text-gray-900 mt-0.5">{{ p.full_name }}</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Full Name</p>
+              <p class="font-semibold text-gray-900 mt-0.5 truncate">{{ p.full_name }}</p>
             </div>
             <div>
-              <p class="text-xs text-gray-400 uppercase">Date of Birth</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Date of Birth</p>
               <p class="font-semibold text-gray-900 mt-0.5">{{ p.date_of_birth|default:"—" }}</p>
             </div>
             <div>
-              <p class="text-xs text-gray-400 uppercase">Age</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Age</p>
               <p class="font-semibold text-gray-900 mt-0.5">{{ p.age|default:"—" }} yrs</p>
             </div>
             <div>
-              <p class="text-xs text-gray-400 uppercase">Gender</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Gender</p>
               <p class="font-semibold text-gray-900 mt-0.5">{% if p.gender == 'F' %}Female{% elif p.gender == 'M' %}Male{% elif p.gender == 'O' %}Other{% else %}—{% endif %}</p>
             </div>
           </div>
         </div>
 
         <!-- Contact Info -->
-        <div class="pt-4 border-t border-gray-100">
-          <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Contact Information</p>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p class="text-xs text-gray-400 uppercase">Phone</p>
-              <p class="font-semibold text-gray-900 mt-0.5">{{ p.phone|default:"—" }}</p>
+        <div class="pt-3 sm:pt-4 border-t border-gray-100">
+          <p class="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Contact Information</p>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div class="col-span-2 sm:col-span-1">
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Phone</p>
+              <p class="font-semibold text-gray-900 mt-0.5 break-words">{{ p.phone|default:"—" }}</p>
             </div>
-            <div>
-              <p class="text-xs text-gray-400 uppercase">Email</p>
-              <p class="font-semibold text-gray-900 mt-0.5">{{ p.email|default:"—" }}</p>
+            <div class="col-span-2 sm:col-span-1">
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Email</p>
+              <p class="font-semibold text-gray-900 mt-0.5 break-all text-xs sm:text-sm">{{ p.email|default:"—" }}</p>
             </div>
             <div class="col-span-2">
-              <p class="text-xs text-gray-400 uppercase">Address</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Address</p>
               <p class="font-semibold text-gray-900 mt-0.5">{{ p.address|default:"—" }}</p>
             </div>
           </div>
         </div>
 
         <!-- Medical Info -->
-        <div class="pt-4 border-t border-gray-100">
-          <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Medical Information</p>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div class="pt-3 sm:pt-4 border-t border-gray-100">
+          <p class="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Medical Information</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">
             <div>
-              <p class="text-xs text-gray-400 uppercase">HPV Status</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">HPV Status</p>
               <p class="font-semibold mt-0.5 {% if p.hpv_status == 'positive' %}text-red-600{% elif p.hpv_status == 'negative' %}text-green-600{% else %}text-gray-500{% endif %}">
                 {{ p.get_hpv_status_display|default:"Unknown" }}
               </p>
             </div>
             <div>
-              <p class="text-xs text-gray-400 uppercase">Pregnancy Status</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Pregnancy Status</p>
               <p class="font-semibold text-gray-900 mt-0.5">{{ p.get_pregnancy_status_display|default:"—" }}</p>
             </div>
             <div>
-              <p class="text-xs text-gray-400 uppercase">Last Screening</p>
+              <p class="text-[10px] sm:text-xs text-gray-400 uppercase">Last Screening</p>
               <p class="font-semibold text-gray-900 mt-0.5">{{ p.last_screening_date|default:"—" }}</p>
             </div>
           </div>
@@ -302,36 +319,36 @@
 
         <!-- Medical History & Notes -->
         {% if p.medical_history or p.medications or p.allergies or p.family_history or p.notes %}
-        <div class="pt-4 border-t border-gray-100">
-          <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Medical History & Notes</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div class="pt-3 sm:pt-4 border-t border-gray-100">
+          <p class="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 sm:mb-3">Medical History & Notes</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {% if p.medical_history %}
             <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Medical History</p>
+              <p class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Medical History</p>
               <p class="text-gray-700 text-xs">{{ p.medical_history }}</p>
             </div>
             {% endif %}
             {% if p.medications %}
             <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Medications</p>
+              <p class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Medications</p>
               <p class="text-gray-700 text-xs">{{ p.medications }}</p>
             </div>
             {% endif %}
             {% if p.allergies %}
             <div class="bg-red-50 rounded-lg p-3">
-              <p class="text-xs text-red-500 uppercase font-semibold mb-1">⚠ Allergies</p>
+              <p class="text-[10px] text-red-500 uppercase font-semibold mb-1">⚠ Allergies</p>
               <p class="text-red-700 text-xs font-medium">{{ p.allergies }}</p>
             </div>
             {% endif %}
             {% if p.family_history %}
             <div class="bg-gray-50 rounded-lg p-3">
-              <p class="text-xs text-gray-400 uppercase font-semibold mb-1">Family History</p>
+              <p class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Family History</p>
               <p class="text-gray-700 text-xs">{{ p.family_history }}</p>
             </div>
             {% endif %}
             {% if p.notes %}
-            <div class="bg-blue-50 rounded-lg p-3 md:col-span-2">
-              <p class="text-xs text-blue-500 uppercase font-semibold mb-1">Notes</p>
+            <div class="bg-blue-50 rounded-lg p-3 sm:col-span-2">
+              <p class="text-[10px] text-blue-500 uppercase font-semibold mb-1">Notes</p>
               <p class="text-blue-800 text-xs">{{ p.notes }}</p>
             </div>
             {% endif %}
@@ -350,16 +367,16 @@
     {% endif %}
 
     <!-- ── Clinical Findings ── -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
 
       <!-- Clinical Explanation -->
       <div class="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
-        <div class="px-5 py-4 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
-          <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
-          <h3 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Clinical Explanation</h3>
+        <div class="px-4 sm:px-5 py-3 sm:py-4 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+          <h3 class="text-xs sm:text-sm font-bold text-blue-900 uppercase tracking-wide">Clinical Explanation</h3>
         </div>
-        <div class="p-5">
-          <p class="text-sm text-gray-700 leading-relaxed">
+        <div class="p-4 sm:p-5">
+          <p class="text-xs sm:text-sm text-gray-700 leading-relaxed">
             {% if cls == 0 %}
             No epithelial abnormality detected. Cells appear morphologically normal with no signs of dysplasia or malignancy. The nucleus-to-cytoplasm ratio is within normal limits. <strong class="text-green-700">This is a negative screening result.</strong>
             {% elif cls == 1 %}
@@ -377,29 +394,29 @@
 
       <!-- Clinical Recommendation -->
       <div class="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
-        <div class="px-5 py-4 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
-          <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-          <h3 class="text-sm font-bold text-amber-900 uppercase tracking-wide">Clinical Recommendation</h3>
+        <div class="px-4 sm:px-5 py-3 sm:py-4 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          <h3 class="text-xs sm:text-sm font-bold text-amber-900 uppercase tracking-wide">Clinical Recommendation</h3>
         </div>
-        <div class="p-5">
-          <p class="text-sm text-gray-700 leading-relaxed">{{ analysis.recommendation }}</p>
+        <div class="p-4 sm:p-5">
+          <p class="text-xs sm:text-sm text-gray-700 leading-relaxed">{{ analysis.recommendation }}</p>
           <!-- Urgency badge -->
-          <div class="mt-4">
+          <div class="mt-3 sm:mt-4">
             {% if cls == 0 %}
-            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 text-green-800 text-xs font-bold">
-              <span class="w-2 h-2 rounded-full bg-green-500"></span> Routine Follow-up
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-green-100 text-green-800 text-[10px] sm:text-xs font-bold">
+              <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-500"></span> Routine Follow-up
             </span>
             {% elif cls == 1 or cls == 2 %}
-            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-bold">
-              <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span> Follow-up Required
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs font-bold">
+              <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-yellow-500 animate-pulse"></span> Follow-up Required
             </span>
             {% elif cls == 3 %}
-            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 text-orange-800 text-xs font-bold">
-              <span class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span> Prompt Action Required
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-orange-100 text-orange-800 text-[10px] sm:text-xs font-bold">
+              <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500 animate-pulse"></span> Prompt Action Required
             </span>
             {% else %}
-            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-100 text-red-800 text-xs font-bold">
-              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Immediate Referral Required
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-red-100 text-red-800 text-[10px] sm:text-xs font-bold">
+              <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500 animate-pulse"></span> Immediate Referral Required
             </span>
             {% endif %}
           </div>
@@ -409,15 +426,15 @@
 
     <!-- ── Patient Checkups Sent ── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+      <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100 flex items-center gap-2">
         <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Patient Checkups Sent</h3>
+        <h3 class="text-xs sm:text-sm font-bold text-gray-700 uppercase tracking-wide">Patient Checkups Sent</h3>
       </div>
-      <div class="px-5 py-4">
+      <div class="px-4 sm:px-5 py-4">
         {% if analysis.recommended_checkups %}
         <div class="flex flex-wrap gap-2">
           {% for checkup in analysis.recommended_checkups %}
-          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-sm font-semibold text-indigo-700">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-full bg-indigo-50 border border-indigo-200 text-xs sm:text-sm font-semibold text-indigo-700">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             {{ checkup }}
           </span>
@@ -430,20 +447,21 @@
     </div>
 
     <!-- ── Actions ── -->
-    <div class="flex flex-wrap gap-3 pb-6">
-      <button onclick="downloadReport()" class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+    <!-- REMOVED STICKY CLASSES HERE -->
+    <div class="flex flex-col sm:flex-wrap sm:flex-row gap-3 pb-6">
+      <button onclick="downloadReport()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Download PDF
       </button>
-      <button onclick="window.print()" class="flex items-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-sm font-semibold rounded-xl transition-colors shadow-sm">
+      <button onclick="window.print()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-sm font-semibold rounded-xl transition-colors shadow-sm">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
         Print
       </button>
-      <button onclick="shareAnalysis()" class="flex items-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-sm font-semibold rounded-xl transition-colors shadow-sm">
+      <button onclick="shareAnalysis()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 text-sm font-semibold rounded-xl transition-colors shadow-sm">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
         Share Link
       </button>
-      <a href="/analyze/" class="flex items-center gap-2 px-5 py-2.5 border border-transparent bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+      <a href="/analyze/" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 border border-transparent bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New Analysis
       </a>
@@ -491,7 +509,7 @@ function selectBatchImage(index) {
 
   // Update confidence
   const cv = document.getElementById('confidenceValue');
-  if (cv) cv.innerHTML = sel.confidencePct + '<span class="text-xl">%</span>';
+  if (cv) cv.innerHTML = sel.confidencePct + '<span class="text-base sm:text-xl">%</span>';
 
   const title = document.getElementById('resultTitle');
   if (title) title.textContent = sel.predictedLabel;
@@ -517,16 +535,16 @@ function selectBatchImage(index) {
       const c = colors[i] || 'red';
       const isAIPick = i === sel.predictedClass;
       html += `
-        <div class="flex items-center gap-3">
-          <div class="w-28 flex-shrink-0">
-            <p class="text-xs font-semibold text-gray-600 leading-tight">${labels[i] || label}</p>
-            <p class="text-xs text-gray-400">Class ${i}</p>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <div class="min-w-[90px] sm:w-28 flex-shrink-0">
+            <p class="text-[10px] sm:text-xs font-semibold text-gray-600 leading-tight">${labels[i] || label}</p>
+            <p class="text-[10px] text-gray-400">Class ${i}</p>
           </div>
-          <div class="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+          <div class="flex-1 h-3 sm:h-4 bg-gray-100 rounded-full overflow-hidden">
             <div class="h-full rounded-full bg-${c}-500 transition-all duration-700" style="width:${prob}%"></div>
           </div>
-          <span class="w-14 text-right text-sm font-bold text-${c}-600">${prob.toFixed(1)}%</span>
-          ${isAIPick ? '<span class="text-xs bg-gray-800 text-white px-2 py-0.5 rounded-full font-semibold flex-shrink-0">AI Pick</span>' : ''}
+          <span class="w-12 sm:w-14 text-right text-xs sm:text-sm font-bold text-${c}-600">${prob.toFixed(1)}%</span>
+          ${isAIPick ? '<span class="text-[10px] bg-gray-800 text-white px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 hidden sm:inline-block">AI Pick</span>' : ''}
         </div>`;
       i++;
     }

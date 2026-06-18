@@ -76,8 +76,8 @@ class ImageValidator:
     MIN_COLOR_STD = 15       # Minimum standard deviation of colors (lowered from 25)
     MIN_SATURATION = 10      # Minimum average saturation (lowered from 20)
     MIN_EDGE_DENSITY = 0.01  # Minimum ratio of edge pixels to total pixels (lowered from 0.02)
-    MIN_WIDTH = 100          # Minimum image width (lowered from 200)
-    MIN_HEIGHT = 100         # Minimum image height (lowered from 200)
+    MIN_WIDTH = 10          # Minimum image width (lowered from 200)
+    MIN_HEIGHT = 10         # Minimum image height (lowered from 200)
     MAX_ASPECT_RATIO = 4.0   # Maximum width:height or height:width ratio (increased from 3.0)
 
     @classmethod
