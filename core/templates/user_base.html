@@ -64,7 +64,7 @@
               <img
     src="{% static 'img/logo.png' %}"
     alt="CerviStage AI Logo"
-    class="w-32 h-auto object-contain"
+    class="w-44 h-auto object-contain"
 > 
           </a>
         </div>
@@ -74,12 +74,25 @@
           {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
           <!-- Doctor/Admin Navigation (NOT for patients) -->
           {% if request.user.profile.role != 'patient' %}
-          <a href="{% url 'analyze-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          {% if request.user.profile.role != 'user' %}
+          <a href="{% if request.user.profile.role == 'senior_technician' %}{% url 'technician-analyze-page' %}{% else %}{% url 'analyze-page' %}{% endif %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'analyze-page' or request.resolver_match.url_name == 'technician-analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Analyze
           </a>
+          {% endif %}
+          {% if request.user.profile.role == 'user' %}
+          <a href="{% url 'doctor-assign-technician' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'doctor-assign-technician' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Assign Tech
+          </a>
+          {% endif %}
+          {% if request.user.profile.role == 'senior_technician' %}
+          <a href="{% url 'technician-dashboard' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'technician-dashboard' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+            Patients List
+          </a>
+          {% else %}
           <a href="{% url 'patient-management' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'patient-management' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Patients
           </a>
+          {% endif %}
           <a href="{% url 'dashboard-page' %}" class="px-3 py-2 rounded-md text-sm font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
             Dashboard
           </a>
@@ -157,7 +170,7 @@
               </svg>
             </button>
           </div>
-        </div>
+        </div>  
       </div>
     </div>
 
@@ -167,12 +180,25 @@
         {% if request.resolver_match.url_name != 'login-page' and request.resolver_match.url_name != 'register-page' and request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'forgot-password' and request.resolver_match.url_name != 'verify-otp' %}
         <!-- Doctor/Admin Mobile Navigation (NOT for patients) -->
         {% if request.user.profile.role != 'patient' %}
-        <a href="{% url 'analyze-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+        {% if request.user.profile.role != 'user' %}
+        <a href="{% if request.user.profile.role == 'senior_technician' %}{% url 'technician-analyze-page' %}{% else %}{% url 'analyze-page' %}{% endif %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'analyze-page' or request.resolver_match.url_name == 'technician-analyze-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Analyze
         </a>
+        {% endif %}
+        {% if request.user.profile.role == 'user' %}
+        <a href="{% url 'doctor-assign-technician' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'doctor-assign-technician' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Assign Tech
+        </a>
+        {% endif %}
+        {% if request.user.profile.role == 'senior_technician' %}
+        <a href="{% url 'technician-dashboard' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'technician-dashboard' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+          Patients List
+        </a>
+        {% else %}
         <a href="{% url 'patient-management' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'patient-management' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Patients
         </a>
+        {% endif %}
         <a href="{% url 'dashboard-page' %}" class="block px-3 py-2 rounded-md text-base font-medium {% if request.resolver_match.url_name == 'dashboard-page' %}text-blue-700 bg-blue-50{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
           Dashboard
         </a>
@@ -279,5 +305,6 @@
   </script>
 
   {% block scripts %}{% endblock %}
+  {% include "includes/toast.html" %}
 </body>
 </html>

@@ -165,19 +165,6 @@ class VPSInferenceService:
     # Public API
     # ------------------------------------------------------------------
 
-    def predict(self, image_file) -> Dict:
-        """Single-image prediction."""
-        if self.session is None:
-            raise RuntimeError("Model not loaded. Copy cervistage_net.onnx to models/.")
-
-        t0 = time.time()
-        arr = _preprocess_one(image_file)[np.newaxis]          # (1, 3, 224, 224)
-        logits = self.session.run(None, {self.input_name: arr})[0][0]
-        result = self._logits_to_result(logits)
-        result["inference_time"] = round(time.time() - t0, 3)
-        print(f"[VPS] Single predict: {result['inference_time']:.3f}s")
-        return result
-
     def predict_batch(self, image_files: List) -> List[Dict]:
         """
         Batch prediction — ONE ONNX session.run() call for all images.

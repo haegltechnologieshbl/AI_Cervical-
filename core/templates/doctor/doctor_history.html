@@ -1,0 +1,226 @@
+{% extends "doctor/doctor_base.html" %}
+{% block title %}Analysis History — CerviStage AI{% endblock %}
+{% block page_title %}Analysis History{% endblock %}
+
+{% block content %}
+<div class="space-y-6 page-in">
+
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-xl font-bold text-gray-900">Analysis History</h2>
+      <p class="text-xs text-gray-500 mt-1">Review diagnostic history and patient records ({{ total_count }} total analyses)</p>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <form method="GET" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Date From -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Date From</label>
+          <input type="date" name="date_from" value="{{ filter_params.date_from|default:'' }}"
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+
+        <!-- Date To -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Date To</label>
+          <input type="date" name="date_to" value="{{ filter_params.date_to|default:'' }}"
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+
+        <!-- Result Filter -->
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">AI Diagnostic Result</label>
+          <select name="result" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="">All Results</option>
+            <option value="0" {% if filter_params.result == '0' %}selected{% endif %}>Normal - NILM</option>
+            <option value="1" {% if filter_params.result == '1' %}selected{% endif %}>ASC-US</option>
+            <option value="2" {% if filter_params.result == '2' %}selected{% endif %}>LSIL</option>
+            <option value="3" {% if filter_params.result == '3' %}selected{% endif %}>HSIL</option>
+            <option value="4" {% if filter_params.result == '4' %}selected{% endif %}>Carcinoma</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Search Row -->
+      <div class="flex flex-col sm:flex-row gap-4 pt-2">
+        <div class="w-full sm:w-48">
+          <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Search By</label>
+          <select name="search_type" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="all" {% if filter_params.search_type == 'all' or not filter_params.search_type %}selected{% endif %}>All Fields</option>
+            <option value="analysis_id" {% if filter_params.search_type == 'analysis_id' %}selected{% endif %}>Analysis ID</option>
+            <option value="patient_name" {% if filter_params.search_type == 'patient_name' %}selected{% endif %}>Patient Name</option>
+            <option value="result" {% if filter_params.search_type == 'result' %}selected{% endif %}>Result Label</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Search Keyword</label>
+          <input type="text" name="search" value="{{ filter_params.search|default:'' }}" placeholder="Enter name or ID..."
+                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="flex items-end gap-2">
+          <button type="submit" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm">
+            Apply Filters
+          </button>
+          <a href="/history/" class="px-6 py-2 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors text-center flex items-center">
+            Clear All
+          </a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Results Table -->
+  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    {% if analyses %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50/50 border-b border-gray-100">
+          <tr>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Date</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Patient</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Result</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Checkups</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Confidence</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">AI Level</th>
+            <th class="text-left px-4 py-3 font-semibold text-gray-500 uppercase tracking-wide text-xs">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for a in analyses %}
+          {% with cls=a.predicted_class %}
+          <tr class="hover:bg-gray-50/50 transition-colors">
+            <td class="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{{ a.created_at|date:"Y-m-d H:i" }}</td>
+            <td class="px-4 py-3">
+              {% if a.patient %}
+                <a href="/patient/{{ a.patient.patient_id }}" class="text-indigo-600 hover:underline text-xs font-semibold">
+                  {{ a.patient.full_name }}
+                </a>
+              {% else %}
+                <span class="text-gray-400 text-xs">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <span title="{{ a.predicted_label }}" class="px-2.5 py-1 rounded-full text-xs font-semibold text-white whitespace-nowrap
+                  {% if cls == 0 %}bg-green-500
+                  {% elif cls == 1 %}bg-lime-500
+                  {% elif cls == 2 %}bg-yellow-500
+                  {% elif cls == 3 %}bg-orange-500
+                  {% else %}bg-red-500{% endif %}">
+                  {% if cls == 0 %}Normal{% elif cls == 1 %}ASC-US{% elif cls == 2 %}LSIL{% elif cls == 3 %}HSIL{% elif cls == 4 %}Carcinoma{% else %}{{ a.predicted_label }}{% endif %}
+                </span>
+                {% if a.batch_total_count %}
+                <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {{ a.batch_total_count }} images
+                </span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="px-4 py-3">
+              {% if a.doctor_checkups %}
+              <div class="flex flex-wrap gap-1.5">
+                {% for checkup in a.doctor_checkups %}
+                <span class="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700 whitespace-nowrap">{{ checkup }}</span>
+                {% endfor %}
+              </div>
+              {% elif a.recommended_checkups %}
+              <div class="flex flex-wrap gap-1.5">
+                {% for checkup in a.recommended_checkups %}
+                <span class="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-medium text-indigo-700 whitespace-nowrap">{{ checkup }}</span>
+                {% endfor %}
+              </div>
+              {% else %}
+              <span class="text-gray-400 text-xs">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-gray-600 text-xs font-medium">{% widthratio a.confidence 1 100 %}%</td>
+            <td class="px-4 py-3">
+              <span class="text-xs font-semibold
+                {% if a.confidence_level == 'High' %}text-green-600
+                {% elif a.confidence_level == 'Moderate' %}text-yellow-600
+                {% else %}text-red-600{% endif %}">
+                {{ a.confidence_level }}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex items-center space-x-3">
+                <a href="{% url 'doctor-analysis-detail' a.analysis_id %}" class="text-indigo-600 hover:underline text-xs font-medium">View</a>
+                <button onclick="downloadReport('{{ a.analysis_id }}')"
+                        class="text-blue-600 hover:underline text-xs font-medium">PDF</button>
+                <form method="post" action="{% url 'analysis-delete' a.analysis_id %}" class="inline"
+                      onsubmit="return confirm('Delete this analysis{% if a.batch_total_count %} and all {{ a.batch_total_count }} images{% endif %}? This cannot be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="text-red-600 hover:underline text-xs font-medium">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="bg-gray-50/50 border-t border-gray-100 px-6 py-4 flex items-center justify-between">
+      <div class="text-sm text-gray-600">
+        Showing <span class="font-medium">{{ analyses.start_index }}</span> to <span class="font-medium">{{ analyses.end_index }}</span> of <span class="font-medium">{{ total_count }}</span> results
+      </div>
+      <div class="flex items-center space-x-2">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% for key,value in filter_params.items %}&{{ key }}={{ value }}{% endfor %}"
+           class="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-100">First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% for key,value in filter_params.items %}&{{ key }}={{ value }}{% endfor %}"
+           class="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-100">Previous</a>
+        {% endif %}
+
+        <span class="px-3 py-1 border border-indigo-200 rounded-lg text-sm bg-indigo-50 text-indigo-700 font-semibold">
+          Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% for key,value in filter_params.items %}&{{ key }}={{ value }}{% endfor %}"
+           class="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-100">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% for key,value in filter_params.items %}&{{ key }}={{ value }}{% endfor %}"
+           class="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-100">Last</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="py-16 text-center text-gray-400">
+      <svg class="mx-auto h-12 w-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <p class="text-sm font-semibold text-gray-600">No analyses found in history.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function downloadReport(analysisId) {
+  const resp = await fetch('/api/v1/reports/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    body: JSON.stringify({ analysis_id: analysisId }),
+  });
+  const blob = await resp.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cervistage_report_${analysisId.slice(0,8)}.pdf`;
+  a.click();
+}
+
+function getCookie(name) {
+  return document.cookie.split('; ').find(r => r.startsWith(name+'='))?.split('=')[1] || '';
+}
+</script>
+{% endblock %}

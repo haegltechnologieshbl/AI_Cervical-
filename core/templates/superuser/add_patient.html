@@ -1,0 +1,296 @@
+{% extends "superuser/admin_base.html" %}
+
+{% block title %}{% if patient %}Edit Patient - {{ patient.full_name }}{% else %}Add Patient - CerviStage AI{% endif %}{% endblock %}
+{% block breadcrumb %}{% if patient %}<span class="text-slate-800 font-medium">Edit Patient</span>{% else %}<span class="text-slate-800 font-medium">Add Patient</span>{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Page Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">{% if patient %}Edit Patient{% else %}Register New Patient{% endif %}</h1>
+                <p class="text-sm text-slate-500 mt-1">{% if patient %}Update patient information{% else %}Add a new patient to the system{% endif %}</p>
+            </div>
+            <a href="{% if patient %}{% url 'admin-patient-profile' patient.patient_id %}{% else %}{% url 'admin-dashboard' %}{% endif %}" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                {% if patient %}Back to Patient{% else %}Back to Dashboard{% endif %}
+            </a>
+        </div>
+    </div>
+
+    <!-- Django Messages -->
+
+    <!-- Form -->
+    <div class="bg-white shadow rounded-lg">
+        <form id="addPatientForm" method="post" action="{% if patient %}{% url 'edit-patient' patient.patient_id %}{% else %}{% url 'add-patient' %}{% endif %}" class="p-6 space-y-6">
+            {% csrf_token %}
+
+            <!-- Basic Information -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Basic Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="first_name" class="block text-sm font-medium text-gray-700">First Name *</label>
+                        <input type="text" id="first_name" name="first_name" required
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            value="{% if patient %}{{ patient.first_name }}{% endif %}">
+                    </div>
+
+                    <div>
+                        <label for="last_name" class="block text-sm font-medium text-gray-700">Last Name *</label>
+                        <input type="text" id="last_name" name="last_name" required
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            value="{% if patient %}{{ patient.last_name }}{% endif %}">
+                    </div>
+
+                    <div>
+                        <label for="date_of_birth" class="block text-sm font-medium text-gray-700">Date of Birth</label>
+                        <input type="date" id="date_of_birth" name="date_of_birth"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            value="{% if patient %}{% if patient.date_of_birth %}{{ patient.date_of_birth|date:'Y-m-d' }}{% endif %}{% endif %}">
+                    </div>
+
+                    <div>
+                        <label for="age" class="block text-sm font-medium text-gray-700">Age</label>
+                        <input type="number" id="age" name="age" min="0" max="150" readonly
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-gray-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            value="{% if patient %}{{ patient.age }}{% endif %}">
+                        <p class="mt-1 text-xs text-gray-500">Auto-calculated from date of birth</p>
+                    </div>
+
+                    <div>
+                        <label for="gender" class="block text-sm font-medium text-gray-700">Gender *</label>
+                        <select id="gender" name="gender" required
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="">Select gender</option>
+                            <option value="M" {% if patient and patient.gender == 'M' %}selected{% endif %}>Male</option>
+                            <option value="F" {% if patient and patient.gender == 'F' %}selected{% endif %}>Female</option>
+                            <option value="O" {% if patient and patient.gender == 'O' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
+                        <input type="tel" id="phone" name="phone"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="+91 9876543210" value="{% if patient %}{{ patient.phone }}{% endif %}">
+                    </div>
+
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email (for login)</label>
+                        <input type="email" id="email" name="email"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="patient@gmail.com" value="{% if patient %}{{ patient.email }}{% endif %}">
+                        <p class="mt-1 text-xs text-gray-500">Used as username for patient login</p>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div>
+                        <label for="patient_password" class="block text-sm font-medium text-gray-700">
+                            {% if patient %}Change Password{% else %}Patient Password{% endif %}
+                        </label>
+                        <div class="relative mt-1">
+                            <input type="password" id="patient_password" name="patient_password"
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm pr-10"
+                                placeholder="{% if patient %}Enter new password to change{% else %}Enter password for patient login{% endif %}">
+                            <button type="button" id="togglePassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                <svg id="eyeIcon" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                <svg id="eyeOffIcon" class="h-5 w-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">
+                            {% if patient %}
+                                {% if patient.user_account %}
+                                    <span class="text-green-600 font-medium">✓ Login account exists</span> ({{ patient.user_account.username }}). Leave empty to keep current password.
+                                {% else %}
+                                    <span class="text-yellow-600 font-medium">⚠ No login account yet.</span> Enter a password + ensure email/phone is filled to create one.
+                                {% endif %}
+                            {% else %}
+                                Leave empty to skip creating login account
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="address" class="block text-sm font-medium text-gray-700">Address</label>
+                        <textarea id="address" name="address" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Full address">{% if patient %}{{ patient.address }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medical Information -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Medical Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="hpv_status" class="block text-sm font-medium text-gray-700">HPV Status</label>
+                        <select id="hpv_status" name="hpv_status"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="unknown" {% if not patient or patient.hpv_status == 'unknown' %}selected{% endif %}>Unknown</option>
+                            <option value="negative" {% if patient and patient.hpv_status == 'negative' %}selected{% endif %}>Negative</option>
+                            <option value="positive" {% if patient and patient.hpv_status == 'positive' %}selected{% endif %}>Positive</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="last_screening_date" class="block text-sm font-medium text-gray-700">Last Screening Date</label>
+                        <input type="date" id="last_screening_date" name="last_screening_date"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            value="{% if patient %}{% if patient.last_screening_date %}{{ patient.last_screening_date|date:'Y-m-d' }}{% endif %}{% endif %}">
+                    </div>
+
+                    <div>
+                        <label for="pregnancy_status" class="block text-sm font-medium text-gray-700">Pregnancy Status</label>
+                        <select id="pregnancy_status" name="pregnancy_status"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <option value="unknown" {% if not patient or patient.pregnancy_status == 'unknown' %}selected{% endif %}>Unknown</option>
+                            <option value="no" {% if patient and patient.pregnancy_status == 'no' %}selected{% endif %}>No</option>
+                            <option value="yes" {% if patient and patient.pregnancy_status == 'yes' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medical History -->
+            <div>
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Medical History</h3>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label for="medical_history" class="block text-sm font-medium text-gray-700">Previous Medical Conditions</label>
+                        <textarea id="medical_history" name="medical_history" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Previous surgeries, conditions, etc.">{% if patient %}{{ patient.medical_history }}{% endif %}</textarea>
+                    </div>
+
+                    <div>
+                        <label for="medications" class="block text-sm font-medium text-gray-700">Current Medications</label>
+                        <textarea id="medications" name="medications" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="List current medications">{% if patient %}{{ patient.medications }}{% endif %}</textarea>
+                    </div>
+
+                    <div>
+                        <label for="allergies" class="block text-sm font-medium text-gray-700">Known Allergies</label>
+                        <textarea id="allergies" name="allergies" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Known drug or food allergies">{% if patient %}{{ patient.allergies }}{% endif %}</textarea>
+                    </div>
+
+                    <div>
+                        <label for="family_history" class="block text-sm font-medium text-gray-700">Family History</label>
+                        <textarea id="family_history" name="family_history" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Family history of relevant conditions">{% if patient %}{{ patient.family_history }}{% endif %}</textarea>
+                    </div>
+
+                    <div>
+                        <label for="notes" class="block text-sm font-medium text-gray-700">Additional Notes</label>
+                        <textarea id="notes" name="notes" rows="2"
+                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            placeholder="Any additional notes or observations">{% if patient %}{{ patient.notes }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-end space-x-4 pt-4 border-t border-gray-200">
+                <a href="{% url 'admin-patients' %}" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    Cancel
+                </a>
+                <button type="submit" id="submitBtn"
+                    class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    {% if patient %}Update Patient{% else %}Register Patient{% endif %}
+                </button>
+            </div>
+
+            <!-- Inline Error Message -->
+            <div id="errorMessage" class="hidden rounded-md bg-red-50 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800" id="errorText">Error</h3>
+                    </div>
+                </div>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<script>
+const addPatientForm = document.getElementById('addPatientForm');
+const submitBtn = document.getElementById('submitBtn');
+const errorMessage = document.getElementById('errorMessage');
+const errorText = document.getElementById('errorText');
+
+// Toggle password visibility
+const togglePassword = document.getElementById('togglePassword');
+const passwordInput = document.getElementById('patient_password');
+const eyeIcon = document.getElementById('eyeIcon');
+const eyeOffIcon = document.getElementById('eyeOffIcon');
+
+togglePassword.addEventListener('click', () => {
+    const isPassword = passwordInput.type === 'password';
+    passwordInput.type = isPassword ? 'text' : 'password';
+    eyeIcon.classList.toggle('hidden', isPassword);
+    eyeOffIcon.classList.toggle('hidden', !isPassword);
+});
+
+// Auto-calculate age from date of birth
+const dateOfBirthInput = document.getElementById('date_of_birth');
+const ageInput = document.getElementById('age');
+
+function calculateAge(dob) {
+    if (!dob) return '';
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age >= 0 ? age : '';
+}
+
+dateOfBirthInput.addEventListener('change', function () {
+    ageInput.value = calculateAge(this.value);
+});
+
+// Form submit
+addPatientForm.addEventListener('submit', (e) => {
+    errorMessage.classList.add('hidden');
+
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const password = passwordInput.value;
+
+    // Validate: if password given, email or phone must be present
+    if (password && !email && !phone) {
+        e.preventDefault();
+        errorText.textContent = 'Please provide an email or phone number to set a password.';
+        errorMessage.classList.remove('hidden');
+        window.scrollTo({ top: errorMessage.offsetTop - 20, behavior: 'smooth' });
+        return;
+    }
+
+    // Show loading state and let form submit normally (POST)
+    submitBtn.disabled = true;
+    const isEditing = {% if patient %}true{% else %}false{% endif %};
+    submitBtn.innerHTML = `<span class="animate-pulse">${isEditing ? 'Updating' : 'Registering'} patient...</span>`;
+});
+</script>
+{% endblock %}

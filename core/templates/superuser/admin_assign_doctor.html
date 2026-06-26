@@ -1,0 +1,160 @@
+{% extends "superuser/admin_base.html" %}
+{% block title %}Assign Doctor - Admin{% endblock %}
+
+{% block content %}
+<div class="space-y-6 mt-8 max-w-6xl mx-auto">
+  
+  <!-- Assignment Form Card -->
+  <div class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-xl font-bold mb-4">Assign Patient to Doctor</h2>
+    
+
+    <form method="POST" action="{% url 'admin-assign-doctor' %}">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Select Patient</label>
+          <select name="patient_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+            <option value="">-- Choose Patient --</option>
+            {% for patient in patients %}
+              <option value="{{ patient.patient_id }}">{{ patient.full_name }} {% if patient.assigned_doctor %}(Currently: Dr. {{ patient.assigned_doctor.get_full_name }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Select Doctor</label>
+          <select name="doctor_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+            <option value="">-- Choose Doctor --</option>
+            {% for doctor in doctors %}
+              <option value="{{ doctor.id }}">Dr. {{ doctor.get_full_name }} ({{ doctor.username }})</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="bg-indigo-600 text-white py-2 px-6 rounded hover:bg-indigo-700 font-medium">
+          Assign Doctor
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Assigned Patients List -->
+  <div class="bg-white shadow rounded-lg overflow-hidden">
+    <div class="px-6 py-4 border-b flex justify-between items-center">
+      <h3 class="text-lg font-bold text-gray-900">Patient Assignments List</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient Name</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Doctor</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Tech</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for patient in patients_page %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="font-medium text-gray-900">{{ patient.full_name }}</div>
+              <div class="text-xs text-gray-500">{{ patient.patient_id|truncatechars:10 }}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if patient.assigned_doctor %}
+                <span class="text-blue-600 font-medium">Dr. {{ patient.assigned_doctor.get_full_name }}</span>
+              {% else %}
+                <span class="text-gray-400 italic">Unassigned</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if patient.assigned_technician %}
+                <span class="text-purple-600 font-medium">{{ patient.assigned_technician.get_full_name }}</span>
+              {% else %}
+                <span class="text-gray-400 italic">Unassigned</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if patient.assigned_doctor %}bg-green-100 text-green-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                  {% if patient.assigned_doctor %}Assigned{% else %}Pending{% endif %}
+               </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <div class="flex items-center justify-end space-x-3">
+                <!-- Edit Assignment (Selects the patient in the dropdown above by scrolling up) -->
+                <button onclick="document.querySelector('select[name=patient_id]').value='{{ patient.patient_id }}'; window.scrollTo({top: 0, behavior: 'smooth'});" class="text-blue-600 hover:text-blue-900" title="Edit Assignment">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                  </svg>
+                </button>
+                <!-- View Patient Info -->
+                <a href="{% url 'admin-patient-profile' patient.patient_id %}" class="text-indigo-600 hover:text-indigo-900" title="View Patient Details">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                  </svg>
+                </a>
+                <!-- Delete Patient -->
+                <button onclick="deletePatient('{{ patient.patient_id }}', '{{ patient.full_name }}')" class="text-red-600 hover:text-red-900" title="Delete Patient">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="px-6 py-4 text-center text-gray-500">No patients found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="px-6 pb-4">
+      {% include 'includes/pagination.html' with page_obj=patients_page %}
+    </div>
+  </div>
+</div>
+
+<script>
+  // Same delete script used on other pages
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function deletePatient(patientId, patientName) {
+    if (!confirm(`Are you sure you want to delete patient "${patientName}"? This action cannot be undone.`)) return;
+    try {
+      const response = await fetch(`/api/v1/patients/${patientId}`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'include'
+      });
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        const result = await response.json();
+        alert(`Failed to delete patient: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert('Failed to delete patient. Please try again.');
+    }
+  }
+</script>
+{% endblock %}

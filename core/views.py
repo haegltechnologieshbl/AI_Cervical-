@@ -17,16 +17,12 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
-    Analysis, Patient, GynecologicalHistory, ReproductiveHistory,
-    ScreeningRecord, FollowUpRecord, TreatmentRecord, Appointment, RiskAssessment,
-    ClinicalNote,
+    Analysis, Patient,
+    ClinicalNote, PapSmearTest, CheckupRecommendation, Notification,
 )
 from .serializers import (
     AnalysisSerializer, AnalyzeRequestSerializer, PatientSerializer, PatientListSerializer,
-    GynecologicalHistorySerializer, ReproductiveHistorySerializer, ScreeningRecordSerializer,
-    FollowUpRecordSerializer, TreatmentRecordSerializer, AppointmentSerializer, RiskAssessmentSerializer
 )
-from services.inference import InferenceService
 from services.inference_vps import VPSInferenceService
 from core.services import ImageValidator
 import cv2
@@ -43,7 +39,6 @@ import string
 User = get_user_model()
 
 RECOMMENDED_CHECKUP_OPTIONS = [
-    "Pap Smear Positive",
     "HPV PCR Testing",
     "Colposcopy",
     "Histopathology (Gold Standard)",
@@ -55,6 +50,40 @@ RECOMMENDED_CHECKUP_OPTIONS = [
 def get_selected_checkups(request):
     selected = request.data.getlist('recommended_checkups')
     return [item for item in selected if item in RECOMMENDED_CHECKUP_OPTIONS]
+
+
+def get_patient_queryset_for_user(user):
+    """Return patients the current user is allowed to work with."""
+    user_role = user.profile.role if hasattr(user, 'profile') else 'user'
+    if user_role == 'admin' or user.is_superuser:
+        return Patient.objects.all()
+    if user_role == 'senior_technician':
+        return Patient.objects.filter(
+            assigned_technician=user,
+            assigned_doctor__isnull=False,
+        )
+    if user_role == 'user':
+        return Patient.objects.filter(assigned_doctor=user)
+    return Patient.objects.none()
+
+
+def get_allowed_patient_for_user(user, patient_id):
+    """Look up a patient only within the user's permitted patient set."""
+    if not patient_id:
+        user_role = user.profile.role if hasattr(user, 'profile') else 'user'
+        if user_role == 'senior_technician':
+            return None, Response(
+                {"error": "Please select a patient assigned to you before running analysis."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None, None
+    try:
+        return get_patient_queryset_for_user(user).get(patient_id=patient_id), None
+    except Patient.DoesNotExist:
+        return None, Response(
+            {"error": "Patient not found or not assigned to you."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
 # Safe print function for Windows console compatibility
 def safe_print(*args, **kwargs):
@@ -69,14 +98,54 @@ def safe_print(*args, **kwargs):
 
 
 
+# ─── Role-based access control ───────────────────────────────────────────────
+
+class RoleRequiredMixin(LoginRequiredMixin):
+    """Restrict a class-based view to specific profile roles.
+
+    Set ``allowed_roles`` on the view (e.g. ``allowed_roles = ('admin',)``).
+    Superusers are always treated as ``'admin'``. Unauthenticated users are
+    redirected to login; authenticated users with the wrong role are sent home.
+    """
+    allowed_roles = ()
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)  # -> login redirect
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        if request.user.is_superuser:
+            role = 'admin'
+        if self.allowed_roles and role not in self.allowed_roles:
+            messages.error(request, "Access denied. You don't have permission to view this page.")
+            return redirect('home')
+        return super().dispatch(request, *args, **kwargs)
+
+
+class CanAnalyze(IsAuthenticated):
+    """Authenticated users except doctors may run AI analysis.
+
+    Per the clinical workflow, doctors do not analyse data themselves — the
+    technician runs the Pap smear test/analysis. Doctors (role ``'user'``) are
+    therefore denied access to the analysis endpoints.
+    """
+    message = "Doctors are not permitted to run analysis. Assign the patient to a technician for Pap smear testing."
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        return role != 'user'
+
+
 # ─── Template Views ────────────────────────────────────────────────────────────
 
 class HomePageView(View):
     """GET / - Landing page (no authentication required)"""
     def get(self, request):
-        # If user is authenticated, redirect to analyze page
+        # If authenticated, send the user to the dashboard router, which forwards
+        # each role to its correct workspace (admin / doctor / technician / patient).
         if request.user.is_authenticated:
-            return redirect('/analyze/')
+            return redirect('/dashboard/')
 
         # Show landing page for non-authenticated users
         return render(request, "home.html")
@@ -87,7 +156,37 @@ class AnalyzePageView(View):
     def get(self, request):
         # Require authentication for analyze
         if not request.user.is_authenticated:
-            return redirect('/login/?next=/analyze/')
+            next_url = request.get_full_path()
+            return redirect(f'/login/?next={next_url}')
+
+        user_role = request.user.profile.role if hasattr(request.user, 'profile') else None
+
+        # Doctors do not analyse data themselves — the technician runs the test.
+        if user_role == 'user':
+            messages.info(request, "Doctors don't run analysis. Assign the patient to a technician for Pap smear testing.")
+            return redirect('/doctor/dashboard/')
+
+        if user_role == 'senior_technician':
+            if request.path == '/analyze/':
+                query_string = f'?{request.META.get("QUERY_STRING")}' if request.META.get("QUERY_STRING") else ''
+                return redirect(f'/technician/analyze/{query_string}')
+            # Server-side patient list (session-authenticated) so the dropdown
+            # never depends on a possibly-stale JWT in localStorage.
+            import json as _json
+            patients = get_patient_queryset_for_user(request.user).order_by('first_name', 'last_name')
+            patients_json = _json.dumps([
+                {
+                    'patient_id': str(p.patient_id),
+                    'full_name': p.full_name,
+                    'age': p.age if p.age is not None else '',
+                    'hpv_status': p.hpv_status,
+                }
+                for p in patients
+            ])
+            return render(request, "technician/technician_analyze.html", {
+                'assigned_patients': patients,
+                'patients_json': patients_json,
+            })
 
         return render(request, "analyze.html")
 
@@ -143,12 +242,24 @@ class HistoryPageView(View):
 
         # Base queryset with role filtering
         user_role = request.user.profile.role
-        if user_role == 'admin':
-            analyses_qs = Analysis.objects.select_related("created_by", "created_by__profile", "patient")
+        _sel = ("created_by", "created_by__profile", "patient")
+        if user_role == 'admin' or request.user.is_superuser:
+            analyses_qs = Analysis.objects.select_related(*_sel)
+        elif user_role == 'user':
+            # Doctor — analyses belonging to patients assigned to this doctor
+            analyses_qs = Analysis.objects.filter(
+                patient__assigned_doctor=request.user
+            ).select_related(*_sel)
+        elif user_role == 'patient':
+            # Patient — only their own analyses
+            analyses_qs = Analysis.objects.filter(
+                patient__user_account=request.user
+            ).select_related(*_sel)
         else:
+            # Technician — analyses they performed
             analyses_qs = Analysis.objects.filter(
                 created_by=request.user
-            ).select_related("created_by", "created_by__profile", "patient")
+            ).select_related(*_sel)
 
         # Filter out non-primary batch analyses (show only the primary analysis from each batch)
         # This prevents showing 10 separate entries when user uploads 10 images as a batch
@@ -203,6 +314,22 @@ class HistoryPageView(View):
         except EmptyPage:
             analyses_page = paginator.page(paginator.num_pages)
 
+        # Attach each patient's latest doctor checkup recommendation to the rows
+        patient_ids = {a.patient_id for a in analyses_page if a.patient_id}
+        if patient_ids:
+            from .models import CheckupRecommendation
+            latest_checkups = {}
+            for rec in CheckupRecommendation.objects.filter(
+                patient_id__in=patient_ids
+            ).order_by('patient_id', '-created_at'):
+                latest_checkups.setdefault(rec.patient_id, rec)
+            for a in analyses_page:
+                rec = latest_checkups.get(a.patient_id)
+                a.doctor_checkups = rec.recommended_list() if rec else []
+        else:
+            for a in analyses_page:
+                a.doctor_checkups = []
+
         # Get all patients for filter dropdown (admin only)
         patients_list = []
         if user_role == 'admin':
@@ -231,7 +358,44 @@ class HistoryPageView(View):
             "page_obj": analyses_page,
         }
 
-        return render(request, "history.html", context)
+        # Choose role-specific template
+        if user_role == 'user':
+            template_name = "doctor/doctor_history.html"
+        elif user_role == 'senior_technician':
+            template_name = "technician/technician_history.html"
+        else:
+            template_name = "history.html"
+
+        return render(request, template_name, context)
+
+
+class DeleteAnalysisView(View):
+    """POST /analysis/<id>/delete/ - delete a single analysis.
+
+    Allowed for the analysis owner (the technician who ran it) or an admin.
+    Redirects back to the page the request came from.
+    """
+    def post(self, request, analysis_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+        analysis = get_object_or_404(Analysis, pk=analysis_id)
+        role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        is_assigned_doctor = (
+            role == 'user' and analysis.patient_id is not None
+            and analysis.patient.assigned_doctor_id == request.user.id
+        )
+        if (request.user.is_superuser or role == 'admin'
+                or analysis.created_by_id == request.user.id
+                or is_assigned_doctor):
+            # Delete the whole batch when removing a batch primary
+            if analysis.batch_id:
+                Analysis.objects.filter(batch_id=analysis.batch_id).delete()
+            else:
+                analysis.delete()
+            messages.success(request, "Analysis deleted.")
+        else:
+            messages.error(request, "You don't have permission to delete this analysis.")
+        return redirect(request.META.get('HTTP_REFERER') or 'technician-history')
 
 
 class LoginPageView(View):
@@ -240,212 +404,185 @@ class LoginPageView(View):
         return render(request, "login.html")
 
 
-class DashboardPageView(View):
-    """GET /dashboard/ - User dashboard with comprehensive statistics"""
-    def get(self, request):
-        # Require authentication for dashboard
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/dashboard/')
+def build_dashboard_context(user):
+    """Analytics context shared by the doctor dashboard and the generic fallback."""
+    from django.db.models import Count, Q
+    from django.db.models.functions import TruncDate
+    from datetime import timedelta
+    import json
 
-        # If admin, redirect to admin dashboard
-        if request.user.profile.role == 'admin':
-            return redirect('/admin/')
+    total_analyses = Analysis.objects.filter(created_by=user).count()
 
-        from django.db.models import Count, Q
-        from django.db.models.functions import TruncDate
-        from datetime import datetime, timedelta
-        import json
+    seven_days_ago = timezone.now() - timedelta(days=7)
+    recent_analyses_count = Analysis.objects.filter(
+        created_by=user, created_at__gte=seven_days_ago
+    ).count()
 
-        # Get user-specific statistics
-        total_analyses = Analysis.objects.filter(created_by=request.user).count()
+    disease_distribution = list(Analysis.objects.filter(created_by=user).values('predicted_class', 'predicted_label').annotate(
+        count=Count('analysis_id')
+    ).order_by('predicted_class'))
 
-        # Recent analyses (last 7 days)
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_analyses_count = Analysis.objects.filter(
-            created_by=request.user,
-            created_at__gte=seven_days_ago
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    date_trends = list(Analysis.objects.filter(
+        created_by=user, created_at__gte=thirty_days_ago
+    ).annotate(date=TruncDate('created_at')).values('date').annotate(
+        count=Count('analysis_id')
+    ).order_by('date'))
+
+    risk_distribution = []
+    for risk in ['Low Risk', 'Moderate Risk', 'High Risk', 'Very High Risk']:
+        count = Analysis.objects.filter(
+            created_by=user,
+            predicted_label__icontains=risk.split()[0] if risk != 'Very High Risk' else 'Carcinoma'
+        ).count()
+        risk_distribution.append({'level': risk, 'count': count})
+
+    confidence_distribution = list(Analysis.objects.filter(created_by=user).values('confidence_level').annotate(
+        count=Count('analysis_id')
+    ).order_by('-count'))
+
+    total_patients_tested = Analysis.objects.filter(
+        created_by=user, patient__isnull=False
+    ).values('patient').distinct().count()
+    patient_analyses = Analysis.objects.filter(created_by=user, patient__isnull=False).count()
+
+    recent_activity = Analysis.objects.filter(created_by=user).filter(
+        Q(batch_id__isnull=True) | Q(is_batch_primary=True)
+    ).select_related('patient').order_by('-created_at')[:10]
+
+    for item in disease_distribution:
+        item['percentage'] = round((item['count'] / total_analyses) * 100, 1) if total_analyses > 0 else 0
+
+    for item in date_trends:
+        if item.get('date'):
+            item['date'] = item['date'].strftime('%Y-%m-%d')
+
+    daily_users_tested = list(Analysis.objects.filter(
+        created_by=user, created_at__gte=thirty_days_ago, patient__isnull=False
+    ).annotate(date=TruncDate('created_at')).values('date').annotate(
+        unique_users=Count('patient', distinct=True)
+    ).order_by('date'))
+    for item in daily_users_tested:
+        if item.get('date'):
+            item['date'] = item['date'].strftime('%Y-%m-%d')
+
+    # --- Doctor-specific context ---
+    total_patients = Patient.objects.filter(assigned_doctor=user).count()
+    pending_reviews = 0
+    pending_pap_smears = []
+    high_risk_count = 0
+    monthly_analyses = 0
+
+    if getattr(getattr(user, 'profile', None), 'role', None) == 'user':
+        assigned_patients = Patient.objects.filter(assigned_doctor=user)
+        pap_smears_without_checkups = PapSmearTest.objects.filter(
+            patient__in=assigned_patients
+        ).exclude(associated_checkups__doctor=user).select_related('patient', 'technician').order_by('-test_date')
+        pending_reviews = pap_smears_without_checkups.count()
+        pending_pap_smears = list(pap_smears_without_checkups[:5])
+
+        high_risk_count = Analysis.objects.filter(
+            patient__in=assigned_patients, predicted_class__in=[3, 4]  # HSIL=3, Carcinoma=4
+        ).values('patient').distinct().count()
+
+        month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        monthly_analyses = Analysis.objects.filter(
+            created_by=user, created_at__gte=month_start
         ).count()
 
-        # Disease type distribution (predicted_class distribution)
-        disease_distribution = list(Analysis.objects.filter(created_by=request.user).values('predicted_class', 'predicted_label').annotate(
-            count=Count('analysis_id')
-        ).order_by('predicted_class'))
-
-        # Date-wise analysis trends (last 30 days)
-        thirty_days_ago = timezone.now() - timedelta(days=30)
-        date_trends = list(Analysis.objects.filter(
-            created_by=request.user,
-            created_at__gte=thirty_days_ago
-        ).annotate(
-            date=TruncDate('created_at')
-        ).values('date').annotate(
-            count=Count('analysis_id')
-        ).order_by('date'))
-
-        # Risk level distribution
-        risk_distribution = []
-        risk_levels = ['Low Risk', 'Moderate Risk', 'High Risk', 'Very High Risk']
-        for risk in risk_levels:
-            count = Analysis.objects.filter(
-                created_by=request.user,
-                predicted_label__icontains=risk.split()[0] if risk != 'Very High Risk' else 'Carcinoma'
-            ).count()
-            risk_distribution.append({'level': risk, 'count': count})
-
-        # Confidence level distribution
-        confidence_distribution = list(Analysis.objects.filter(created_by=request.user).values('confidence_level').annotate(
-            count=Count('analysis_id')
-        ).order_by('-count'))
-
-        # Patient statistics — unique patients this user has tested
-        total_patients = Analysis.objects.filter(
-            created_by=request.user, patient__isnull=False
-        ).values('patient').distinct().count()
-        patient_analyses = Analysis.objects.filter(created_by=request.user, patient__isnull=False).count()
-
-        # Recent activity - show user's analyses
-        recent_activity = Analysis.objects.filter(
-            created_by=request.user
-        ).filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).select_related('patient').order_by('-created_at')[:10]
-
-        # Calculate percentages for disease distribution
-        for item in disease_distribution:
-            if total_analyses > 0:
-                item['percentage'] = round((item['count'] / total_analyses) * 100, 1)
-            else:
-                item['percentage'] = 0
-
-        # Convert date_trends dates to strings for JSON serialization
-        for item in date_trends:
-            if 'date' in item and item['date']:
-                item['date'] = item['date'].strftime('%Y-%m-%d')
-
-        # Daily users tested (unique patients per day - last 30 days)
-        daily_users_tested = list(Analysis.objects.filter(
-            created_by=request.user,
-            created_at__gte=thirty_days_ago,
-            patient__isnull=False
-        ).annotate(
-            date=TruncDate('created_at')
-        ).values('date').annotate(
-            unique_users=Count('patient', distinct=True)
-        ).order_by('date'))
-
-        # Convert dates to strings for JSON serialization
-        for item in daily_users_tested:
-            if 'date' in item and item['date']:
-                item['date'] = item['date'].strftime('%Y-%m-%d')
-
-        context = {
-            'total_analyses': total_analyses,
-            'recent_analyses_count': recent_analyses_count,
-            'disease_distribution_json': json.dumps(disease_distribution),
-            'date_trends_json': json.dumps(date_trends),
-            'risk_distribution_json': json.dumps(risk_distribution),
-            'confidence_distribution_json': json.dumps(confidence_distribution),
-            'daily_users_tested_json': json.dumps(daily_users_tested),
-            'total_patients': total_patients,
-            'patient_analyses': patient_analyses,
-            'recent_activity': recent_activity,
-        }
-        return render(request, "user_dashboard.html", context)
+    return {
+        'total_analyses': total_analyses,
+        'recent_analyses_count': recent_analyses_count,
+        'disease_distribution_json': json.dumps(disease_distribution),
+        'date_trends_json': json.dumps(date_trends),
+        'risk_distribution_json': json.dumps(risk_distribution),
+        'confidence_distribution_json': json.dumps(confidence_distribution),
+        'daily_users_tested_json': json.dumps(daily_users_tested),
+        'total_patients': total_patients,
+        'total_patients_tested': total_patients_tested,
+        'patient_analyses': patient_analyses,
+        'recent_activity': recent_activity,
+        'pending_reviews': pending_reviews,
+        'pending_pap_smears': pending_pap_smears,
+        'high_risk_count': high_risk_count,
+        'monthly_analyses': monthly_analyses,
+    }
 
 
-class PatientDashboardView(View):
-    """GET /patient/dashboard/ - Patient-specific dashboard showing only their results"""
+def build_doctor_dashboard_context(user):
+    """Context for the doctor dashboard — only the doctor's own workload.
+
+    Doctors don't run analysis, so this deliberately omits all AI analytics and
+    surfaces just: assigned patients, Pap smear results awaiting review,
+    high-risk patients, and checkups the doctor has completed.
+    """
+    assigned_patients = Patient.objects.filter(assigned_doctor=user)
+    total_patients = assigned_patients.count()
+
+    pap_smears_without_checkups = PapSmearTest.objects.filter(
+        patient__in=assigned_patients
+    ).exclude(associated_checkups__doctor=user).select_related('patient', 'technician').order_by('-test_date')
+    pending_reviews = pap_smears_without_checkups.count()
+    pending_pap_smears = list(pap_smears_without_checkups[:8])
+
+    high_risk_count = Analysis.objects.filter(
+        patient__in=assigned_patients, predicted_class__in=[3, 4]  # HSIL=3, Carcinoma=4
+    ).values('patient').distinct().count()
+
+    completed_reviews = CheckupRecommendation.objects.filter(
+        doctor=user
+    ).select_related('patient', 'pap_smear_test').order_by('-created_at')
+
+    return {
+        'total_patients': total_patients,
+        'pending_reviews': pending_reviews,
+        'pending_pap_smears': pending_pap_smears,
+        'high_risk_count': high_risk_count,
+        'completed_reviews_count': completed_reviews.count(),
+        'recent_reviews': list(completed_reviews[:10]),
+    }
+
+
+class DashboardPageView(View):
+    """GET /dashboard/ - Routes each role to its own dashboard."""
     def get(self, request):
         if not request.user.is_authenticated:
-            return redirect('/login/?next=/patient/dashboard/')
-
-        # Only allow patients to access this dashboard
-        if request.user.profile.role != 'patient':
-            return redirect('/dashboard/')
-
-        # Get patient record linked to this user
-        try:
-            patient = request.user.patient_record
-        except Patient.DoesNotExist:
-            return redirect('/login/')
-
-        # Get only this patient's analyses
-        analyses_qs = Analysis.objects.filter(
-            patient=patient
-        ).filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).select_related('created_by', 'created_by__profile').order_by('-created_at')
-
-        total_analyses = analyses_qs.count()
-        latest_analysis = analyses_qs.first() if analyses_qs else None
-        if latest_analysis:
-            latest_analysis.confidence_pct = round(latest_analysis.confidence * 100)
-
-        from django.core.paginator import Paginator
-        import json as _json
-        paginator = Paginator(analyses_qs, 10)
-        page_number = request.GET.get('page', 1)
-        analyses_page = paginator.get_page(page_number)
-
-        # Enrich page items
-        for a in analyses_page:
-            a.confidence_pct = round(a.confidence * 100)
-
-        # Build chart data from ALL analyses (not just current page)
-        all_analyses = list(analyses_qs.values('predicted_class', 'predicted_label', 'confidence', 'created_at'))
-
-        # Stage distribution counts
-        stage_counts = {}
-        for a in all_analyses:
-            lbl = a['predicted_label']
-            stage_counts[lbl] = stage_counts.get(lbl, 0) + 1
-
-        stage_labels = list(stage_counts.keys())
-        stage_data   = [stage_counts[k] for k in stage_labels]
-        stage_colors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444']
-        stage_color_map = {
-            'Normal': '#22c55e', 'Atypia': '#84cc16',
-            'LSIL': '#eab308', 'HSIL': '#f97316', 'Carcinoma': '#ef4444',
-        }
-        stage_bg = [stage_color_map.get(lbl, '#8b5cf6') for lbl in stage_labels]
-
-        # Confidence trend (last 10 for chart, oldest first)
-        trend_items = list(reversed(all_analyses[:10]))
-        trend_labels = [a['created_at'].strftime('%d %b') for a in trend_items]
-        trend_data   = [round(a['confidence'] * 100, 1) for a in trend_items]
-
-        # Recent checkups: collect from last 5 analyses that have checkups
-        recent_checkups = []
-        for a in analyses_qs.exclude(recommended_checkups=[]).values('recommended_checkups', 'created_at', 'analysis_id')[:5]:
-            for c in (a['recommended_checkups'] or []):
-                recent_checkups.append({
-                    'name': c,
-                    'date': a['created_at'].strftime('%d %b %Y'),
-                    'analysis_id': str(a['analysis_id']),
-                })
-            if len(recent_checkups) >= 8:
-                break
-
-        context = {
-            'patient': patient,
-            'analyses': analyses_page,
-            'total_analyses': total_analyses,
-            'latest_analysis': latest_analysis,
-            # chart data (JSON safe)
-            'chart_stage_labels': _json.dumps(stage_labels),
-            'chart_stage_data':   _json.dumps(stage_data),
-            'chart_stage_bg':     _json.dumps(stage_bg),
-            'chart_trend_labels': _json.dumps(trend_labels),
-            'chart_trend_data':   _json.dumps(trend_data),
-            'recent_checkups':    recent_checkups,
-        }
-        return render(request, "patient_dashboard.html", context)
+            return redirect('/login/?next=/dashboard/')
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        if request.user.is_superuser or role == 'admin':
+            return redirect('/admin/')
+        if role == 'senior_technician':
+            return redirect('/technician/dashboard/')
+        if role == 'patient':
+            return redirect('/patient/dashboard/')
+        if role == 'user':  # 'user' is the Doctor role
+            return redirect('/doctor/dashboard/')
+        # Fallback for any authenticated user without a specialised role
+        return render(request, "user_dashboard.html", build_dashboard_context(request.user))
 
 
 class AnalysisDetailView(View):
     """GET /analysis/<analysis_id> - Detailed analysis results page"""
     def get(self, request, analysis_id):
         analysis = get_object_or_404(Analysis, pk=analysis_id)
+
+        # Access control for authenticated staff — each role only sees analyses
+        # within its scope. (Unauthenticated share-link viewers are unaffected.)
+        if request.user.is_authenticated:
+            user_role = request.user.profile.role if hasattr(request.user, 'profile') else None
+            if not (request.user.is_superuser or user_role == 'admin'):
+                p = analysis.patient
+                if user_role == 'user':
+                    allowed = bool(p) and p.assigned_doctor_id == request.user.id
+                elif user_role == 'senior_technician':
+                    allowed = analysis.created_by_id == request.user.id or (bool(p) and p.assigned_technician_id == request.user.id)
+                elif user_role == 'patient':
+                    allowed = bool(p) and p.user_account_id == request.user.id
+                else:
+                    allowed = analysis.created_by_id == request.user.id
+                if not allowed:
+                    messages.error(request, "You don't have access to this analysis.")
+                    return redirect('/history/')
 
         # If this is part of a batch but not the primary analysis, redirect to primary
         if analysis.batch_id and not analysis.is_batch_primary:
@@ -459,7 +596,6 @@ class AnalysisDetailView(View):
         # Convert probabilities and scores to percentages for display
         probabilities_pct = {k: round(float(v) * 100, 2) for k, v in analysis.probabilities.items()}
         confidence_pct = round(analysis.confidence * 100, 1)
-        uncertainty_pct = round(analysis.uncertainty * 100, 1)
 
         # Fetch batch information if this is a batch primary analysis
         batch_analyses = []
@@ -479,11 +615,9 @@ class AnalysisDetailView(View):
                         'stage_label': batch_data.get('stage_label'),
                         'probabilities': batch_data.get('probabilities'),
                         'confidence': batch_data.get('confidence'),
-                        'uncertainty': batch_data.get('uncertainty'),
                         'confidence_level': batch_data.get('confidence_level'),
                         'risk_level': batch_data.get('risk_level'),
                         'risk_color': batch_data.get('risk_color'),
-                        'confidence_interpretation': batch_data.get('confidence_interpretation'),
                         'recommendation': batch_data.get('recommendation'),
                         'explanation': batch_data.get('explanation'),
                     }
@@ -511,29 +645,45 @@ class AnalysisDetailView(View):
                 pa.confidence_pct = round(pa.confidence * 100, 1)
                 pa.is_current = (pa.analysis_id == analysis.analysis_id)
 
+        # Technician's Pap smear report and the doctor's review for this patient
+        pap_smear = None
+        checkup = None
+        doctor_checkups = []
+        if analysis.patient:
+            from .models import CheckupRecommendation, PapSmearTest
+            pap_smear = PapSmearTest.objects.filter(
+                patient=analysis.patient
+            ).select_related('technician').order_by('-test_date').first()
+            checkup = CheckupRecommendation.objects.filter(
+                patient=analysis.patient
+            ).select_related('doctor').order_by('-created_at').first()
+            if checkup:
+                doctor_checkups = checkup.recommended_list()
+
         context = {
             'analysis': analysis,
             'probabilities': probabilities_pct,
             'confidence_pct': confidence_pct,
-            'uncertainty_pct': uncertainty_pct,
             'batch_analyses': batch_analyses,
             'batch_data': batch_data,
             'is_batch': bool(analysis.batch_id),
             'patient_analyses': patient_analyses,
+            'doctor_checkups': doctor_checkups,
+            'pap_smear': pap_smear,
+            'checkup': checkup,
         }
-        return render(request, "analysis_detail.html", context)
+        role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        if role == 'user':
+            template_name = "doctor/doctor_analysis_detail.html"
+        elif role == 'senior_technician':
+            template_name = "technician/technician_analysis_detail.html"
+        elif role == 'patient':
+            template_name = "patient/patient_analysis_detail.html"
+        else:
+            template_name = "analysis_detail.html"
 
+        return render(request, template_name, context)
 
-class SettingsPageView(View):
-    """GET /settings/ - User settings page"""
-    def get(self, request):
-        # Require authentication for settings
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/settings/')
-
-        if request.user.profile.role == 'admin':
-            return render(request, "admin_settings.html")
-        return render(request, "settings.html")
 
 
 class UserProfilePageView(View):
@@ -547,7 +697,16 @@ class UserProfilePageView(View):
         context = {
             'user': user,
         }
-        return render(request, "user_profile.html", context)
+        # Choose role-specific template
+        role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        if role == 'user':
+            template_name = "doctor/doctor_profile.html"
+        elif role == 'senior_technician':
+            template_name = "technician/technician_profile.html"
+        else:
+            template_name = "user_profile.html"
+
+        return render(request, template_name, context)
 
 
 class StatsView(APIView):
@@ -659,19 +818,6 @@ class HospitalDashboardStatsView(APIView):
         ).count()
         analyses_today = analysis_queryset.filter(created_at__date=today).count()
 
-        # Appointment Statistics
-        if is_admin:
-            appt_queryset = Appointment.objects.all()
-        else:
-            appt_queryset = Appointment.objects.filter(
-                patient__created_by=request.user
-            )
-
-        todays_appointments = appt_queryset.filter(
-            scheduled_date__date=today,
-            status__in=['scheduled', 'confirmed']
-        ).count()
-
         # Stage Distribution
         stage_dist = analysis_queryset.values('predicted_class').annotate(
             count=Count('analysis_id')
@@ -680,19 +826,6 @@ class HospitalDashboardStatsView(APIView):
         stage_distribution = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
         for item in stage_dist:
             stage_distribution[item['predicted_class']] = item['count']
-
-        # Follow-up Statistics
-        follow_up_pending = FollowUpRecord.objects.filter(
-            patient__in=patient_queryset,
-            status='pending',
-            scheduled_date__lte=today + timedelta(days=7)
-        ).count()
-
-        follow_up_overdue = FollowUpRecord.objects.filter(
-            patient__in=patient_queryset,
-            status='pending',
-            scheduled_date__lt=today
-        ).count()
 
         # Monthly Detection Rate
         month_screened = analysis_queryset.filter(
@@ -752,17 +885,6 @@ class HospitalDashboardStatsView(APIView):
                 'negative_cases': negative_cases,
                 'pending_reviews': pending_reviews,
                 'analyses_today': analyses_today,
-            },
-            'appointment_stats': {
-                'today': todays_appointments,
-                'this_week': appt_queryset.filter(
-                    scheduled_date__date__gte=today,
-                    scheduled_date__date__lte=today + timedelta(days=7)
-                ).count(),
-            },
-            'follow_up_stats': {
-                'pending': follow_up_pending,
-                'overdue': follow_up_overdue,
             },
             'stage_distribution': stage_distribution,
             'monthly_detection_rate': round(monthly_detection_rate, 2),
@@ -829,21 +951,21 @@ class PatientManagementView(View):
                 latest_analysis=Max('analyses__created_at')
             ).order_by('-latest_analysis', '-created_at')
         elif user_role == 'senior_technician':
-            # Technicians see patients they registered OR have run analyses on
+            # Technicians see patients assigned to them
             patients = Patient.objects.select_related(
                 'created_by', 'created_by__profile'
             ).filter(
-                Q(created_by=request.user) | Q(analyses__created_by=request.user)
+                assigned_technician=request.user
             ).annotate(
                 analyses_count=Count('analyses'),
                 latest_analysis=Max('analyses__created_at')
             ).distinct().order_by('-latest_analysis', '-created_at')
         else:
-            # Doctors only see patients they have tested (performed analyses on)
+            # Doctors only see patients assigned to them
             patients = Patient.objects.select_related(
                 'created_by', 'created_by__profile'
             ).filter(
-                analyses__created_by=request.user
+                assigned_doctor=request.user
             ).annotate(
                 analyses_count=Count('analyses'),
                 latest_analysis=Max('analyses__created_at')
@@ -857,6 +979,7 @@ class PatientManagementView(View):
 
         # Count patients with analyses
         patients_with_analyses = patients.filter(analyses_count__gt=0).count()
+        patients_awaiting_analyses = total_patients - patients_with_analyses
 
         from django.core.paginator import Paginator
         paginator = Paginator(patients, 25)
@@ -868,9 +991,19 @@ class PatientManagementView(View):
             'total_patients': total_patients,
             'recent_patients': recent_patients,
             'patients_with_analyses': patients_with_analyses,
+            'patients_awaiting_analyses': patients_awaiting_analyses,
             'user_role': request.user.profile.role,
         }
-        return render(request, "patients.html", context)
+        
+        # Choose role-specific template
+        if user_role == 'user':
+            template_name = "doctor/doctor_patients.html"
+        elif user_role == 'senior_technician':
+            template_name = "technician/technician_patients.html"
+        else:
+            template_name = "patients.html"
+
+        return render(request, template_name, context)
 
 
 class AddPatientView(View):
@@ -886,7 +1019,7 @@ class AddPatientView(View):
             except Patient.DoesNotExist:
                 return redirect('/admin/patients/')
 
-        return render(request, "add_patient.html", {'patient': patient})
+        return render(request, "superuser/add_patient.html", {'patient': patient})
 
     def post(self, request, patient_id=None):
         """Handle both create and update"""
@@ -1015,12 +1148,23 @@ class PatientProfileView(View):
         if not request.user.is_authenticated:
             return redirect('/login/?next=/patient/' + str(patient_id))
 
-        # Allow all authenticated users to view any patient profile
-        # Removed restriction to only show patients created by current user
         try:
             patient = Patient.objects.get(patient_id=patient_id)
         except Patient.DoesNotExist:
             return redirect('/patients/')
+
+        # Access control: each role may only open patients within its scope.
+        user_role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        if request.user.is_superuser or user_role == 'admin':
+            pass  # admins can view any patient
+        elif user_role in ('user', 'senior_technician'):
+            if not get_patient_queryset_for_user(request.user).filter(patient_id=patient_id).exists():
+                messages.error(request, "This patient is not assigned to you.")
+                return redirect('/patients/')
+        elif user_role == 'patient':
+            if patient.user_account_id != request.user.id:
+                messages.error(request, "Access denied.")
+                return redirect('/patient/dashboard/')
 
         analyses = Analysis.objects.filter(
             patient=patient
@@ -1061,7 +1205,6 @@ class PatientProfileView(View):
             if analysis.is_batch_primary and analysis.batch_aggregated_data:
                 agg_data = analysis.batch_aggregated_data.get('averaged_prediction', {})
                 analysis.confidence_pct = round(agg_data.get('confidence', analysis.confidence) * 100, 1)
-                analysis.uncertainty_pct = round(agg_data.get('uncertainty', analysis.uncertainty) * 100, 1)
                 analysis.display_confidence = agg_data.get('confidence', analysis.confidence)
                 aggregated_probs = agg_data.get('probabilities', {})
                 if aggregated_probs:
@@ -1071,7 +1214,6 @@ class PatientProfileView(View):
                 analysis.batch_count = analysis.batch_total_count or 1
             else:
                 analysis.confidence_pct = round(analysis.confidence * 100, 1)
-                analysis.uncertainty_pct = round(analysis.uncertainty * 100, 1)
                 analysis.display_confidence = analysis.confidence
                 if analysis.probabilities:
                     analysis.probabilities_pct = {k: round(v * 100, 1) for k, v in analysis.probabilities.items()}
@@ -1095,6 +1237,10 @@ class PatientProfileView(View):
         # Clinical notes
         clinical_notes = ClinicalNote.objects.filter(patient=patient).select_related('created_by', 'analysis')
 
+        # Pap smear tests (by technician) and checkup recommendations (by doctor)
+        pap_smears = patient.pap_smear_tests.select_related('technician').order_by('-test_date')
+        checkups = patient.checkup_recommendations.select_related('doctor', 'pap_smear_test').order_by('-created_at')
+
         context = {
             'patient': patient,
             'analyses': analyses_page,
@@ -1108,8 +1254,20 @@ class PatientProfileView(View):
             'chart_classes': chart_classes,
             'chart_labels_map': chart_labels_map,
             'clinical_notes': clinical_notes,
+            'pap_smears': pap_smears,
+            'checkups': checkups,
         }
-        return render(request, "patient_profile.html", context)
+        
+        # Choose role-specific template
+        user_role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        if user_role == 'user':
+            template_name = "doctor/doctor_patient_profile.html"
+        elif user_role == 'senior_technician':
+            template_name = "technician/technician_patient_profile.html"
+        else:
+            template_name = "patient/patient_profile.html"
+
+        return render(request, template_name, context)
 
     def post(self, request, patient_id):
         """Handle patient update via POST"""
@@ -1244,6 +1402,8 @@ class LoginView(APIView):
             redirect_url = '/admin/'
         elif user.profile.role == 'patient':
             redirect_url = '/patient/dashboard/'
+        elif user.profile.role == 'senior_technician':
+            redirect_url = '/technician/dashboard/'
         else:
             redirect_url = '/dashboard/'
 
@@ -1402,11 +1562,30 @@ class PatientListCreateAPIView(APIView):
     """GET/POST /api/v1/patients - List or create patients"""
     permission_classes = [AllowAny]  # Explicitly allow all requests
     parser_classes = [JSONParser, MultiPartParser]
-    authentication_classes = []  # Disable DRF authentication, use session/JWT manually
 
     def get(self, request):
         """List all patients"""
-        patients = Patient.objects.all().order_by('-created_at')
+        django_user = getattr(request._request, 'user', request.user)
+        is_authenticated = django_user.is_authenticated
+        user = django_user
+        
+        if not is_authenticated:
+            try:
+                from rest_framework_simplejwt.authentication import JWTAuthentication
+                jwt_auth = JWTAuthentication()
+                auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+                if auth_header.startswith('Bearer '):
+                    token = auth_header.split(' ')[1]
+                    validated_token = jwt_auth.get_validated_token(token)
+                    user = jwt_auth.get_user(validated_token)
+                    is_authenticated = True
+            except Exception:
+                pass
+                
+        if not is_authenticated:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        patients = get_patient_queryset_for_user(user).order_by('-created_at')
 
         serializer = PatientListSerializer(patients, many=True)
         return Response({
@@ -1553,7 +1732,6 @@ class PatientHistoryAPIView(APIView):
         total_analyses = analyses.count()
         if total_analyses > 0:
             avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-            avg_uncertainty = sum(a.uncertainty for a in analyses) / total_analyses
 
             # Severity distribution
             severity_counts = {}
@@ -1562,7 +1740,6 @@ class PatientHistoryAPIView(APIView):
                 severity_counts[label] = severity_counts.get(label, 0) + 1
         else:
             avg_confidence = 0
-            avg_uncertainty = 0
             severity_counts = {}
 
         # Serialize analyses with full details
@@ -1573,7 +1750,6 @@ class PatientHistoryAPIView(APIView):
                 "predicted_class": analysis.predicted_class,
                 "predicted_label": analysis.predicted_label,
                 "confidence": round(analysis.confidence * 100, 2),
-                "uncertainty": round(analysis.uncertainty * 100, 2),
                 "confidence_level": analysis.confidence_level,
                 "recommendation": analysis.recommendation,
                 "image_url": analysis.image.url if analysis.image else None,
@@ -1585,7 +1761,6 @@ class PatientHistoryAPIView(APIView):
             "statistics": {
                 "total_analyses": total_analyses,
                 "avg_confidence": round(avg_confidence * 100, 2),
-                "avg_uncertainty": round(avg_uncertainty * 100, 2),
                 "severity_distribution": severity_counts
             },
             "analyses": analyses_data
@@ -1618,7 +1793,6 @@ class PatientStatsAPIView(APIView):
                 "predicted_class": analysis.predicted_class,
                 "predicted_label": analysis.predicted_label,
                 "confidence": round(analysis.confidence * 100, 2),
-                "uncertainty": round(analysis.uncertainty * 100, 2),
             })
 
         # Calculate trend summary
@@ -1846,857 +2020,6 @@ class UserManagementView(APIView):
 
 # ─── Admin Views ───────────────────────────────────────────────────────────────
 
-class AdminAnalysisDetailView(View):
-    """GET /admin/analysis/<analysis_id> - Admin view for detailed analysis results"""
-    def get(self, request, analysis_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/analysis/' + str(analysis_id))
-
-        if request.user.profile.role != 'admin':
-            return redirect('/admin/')
-
-        analysis = get_object_or_404(Analysis, pk=analysis_id)
-
-        # If this is part of a batch but not the primary analysis, redirect to primary
-        if analysis.batch_id and not analysis.is_batch_primary:
-            try:
-                primary_analysis = Analysis.objects.filter(batch_id=analysis.batch_id, is_batch_primary=True).first()
-                if primary_analysis:
-                    return redirect(f'/admin/analysis/{primary_analysis.analysis_id}')
-            except:
-                pass  # If primary not found, show current analysis
-
-        probabilities_pct = {k: round(float(v) * 100, 2) for k, v in analysis.probabilities.items()}
-        confidence_pct = round(analysis.confidence * 100, 1)
-        uncertainty_pct = round(analysis.uncertainty * 100, 1)
-
-        # Fetch batch information if this is a batch primary analysis
-        batch_analyses = []
-        batch_data = None
-        if analysis.batch_id and analysis.is_batch_primary:
-            batch_analyses = list(Analysis.objects.filter(batch_id=analysis.batch_id).order_by('batch_position'))
-            batch_data = analysis.batch_aggregated_data
-            # Add confidence percentage and probabilities to each batch analysis
-            for ba in batch_analyses:
-                ba.confidence_pct = round(ba.confidence * 100, 1)
-                ba.probabilities_pct = {k: round(v * 100, 1) for k, v in ba.probabilities.items()}
-
-        context = {
-            'analysis': analysis,
-            'probabilities': probabilities_pct,
-            'confidence_pct': confidence_pct,
-            'uncertainty_pct': uncertainty_pct,
-            'user_role': 'admin',
-            'batch_analyses': batch_analyses,
-            'batch_data': batch_data,
-            'is_batch': bool(analysis.batch_id),
-        }
-        return render(request, "admin_analysis_detail.html", context)
-
-
-class AdminDashboardView(View):
-    """GET /admin/ - Dashboard for all users (admin and users)"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/')
-
-        user_role = request.user.profile.role
-        is_admin = user_role == 'admin' or request.user.is_superuser
-
-        if is_admin:
-            user_role = 'admin'
-            total_users = User.objects.count()
-            total_analyses = Analysis.objects.count()
-
-            thirty_days_ago = timezone.now() - timedelta(days=30)
-            recent_users = User.objects.filter(
-                date_joined__gte=thirty_days_ago
-            ).count()
-
-            role_dist = User.objects.values('profile__role').annotate(
-                count=Count('id')
-            ).order_by('-count')
-
-            recent_analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile', 'patient'
-            ).order_by('-created_at')[:20]
-
-            # Separate recent registrations by role
-            recent_doctor_registrations = User.objects.select_related('profile').filter(
-                profile__role='user',
-                is_superuser=False
-            ).order_by('-date_joined')[:10]
-
-            recent_technician_registrations = User.objects.select_related('profile').filter(
-                profile__role='senior_technician',
-                is_superuser=False
-            ).order_by('-date_joined')[:10]
-
-            # Count stats
-            total_doctors = User.objects.filter(
-                profile__role='user',
-                is_superuser=False
-            ).count()
-
-            total_technicians = User.objects.filter(
-                profile__role='senior_technician',
-                is_superuser=False
-            ).count()
-
-            total_patients_registered = Patient.objects.count()
-
-            # New this month
-            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            new_doctors_month = User.objects.filter(
-                profile__role='user',
-                is_superuser=False,
-                date_joined__gte=month_start
-            ).count()
-
-            new_technicians_month = User.objects.filter(
-                profile__role='senior_technician',
-                is_superuser=False,
-                date_joined__gte=month_start
-            ).count()
-
-            new_patients_month = Patient.objects.filter(
-                created_at__gte=month_start
-            ).count()
-
-            # Get recent patients for dashboard
-            recent_patients = Patient.objects.select_related(
-                'created_by', 'created_by__profile'
-            ).order_by('-created_at')[:10]
-
-            context = {
-                'total_users': total_users,
-                'total_analyses': total_analyses,
-                'recent_users': recent_users,
-                'role_dist': list(role_dist),
-                'recent_analyses': recent_analyses,
-                'recent_doctor_registrations': recent_doctor_registrations,
-                'recent_technician_registrations': recent_technician_registrations,
-                'recent_patients': recent_patients,
-                'total_doctors': total_doctors,
-                'total_technicians': total_technicians,
-                'total_patients_registered': total_patients_registered,
-                'new_doctors_month': new_doctors_month,
-                'new_technicians_month': new_technicians_month,
-                'new_patients_month': new_patients_month,
-                'user_role': 'admin',
-            }
-        else:
-            total_analyses = Analysis.objects.filter(
-                created_by=request.user
-            ).count()
-
-            recent_analyses = Analysis.objects.filter(
-                created_by=request.user
-            ).order_by('-created_at')[:20]
-
-            context = {
-                'total_analyses': total_analyses,
-                'recent_analyses': recent_analyses,
-                'user_role': 'user',
-            }
-
-        return render(request, "admin_dashboard.html", context)
-
-
-from django.core.paginator import Paginator
-from django.contrib import messages
-
-class AdminDoctorsView(View):
-    """GET /admin/doctors - View all doctors"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/doctors/')
-
-        users_list = User.objects.select_related('profile').filter(
-            profile__role='user',
-            is_superuser=False
-        ).order_by('-date_joined')
-
-        paginator = Paginator(users_list, 25)
-        users = paginator.get_page(request.GET.get('page'))
-
-        return render(request, "admin_doctors.html", {'users': users})
-
-    def post(self, request):
-        """Handle delete user"""
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-
-        action = request.POST.get('action')
-        user_id = request.POST.get('user_id')
-
-        try:
-            user = User.objects.get(id=user_id, is_superuser=False)
-        except User.DoesNotExist:
-            messages.error(request, 'User not found.')
-            return redirect('/admin/doctors/')
-
-        if action == 'delete':
-            username = user.username
-            user.delete()
-            messages.success(request, f'User "{username}" deleted successfully.')
-
-        return redirect('/admin/doctors/')
-
-class AddDoctorView(View):
-    """GET /admin/doctor/add/ - Add a new doctor account"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/doctor/add')
-
-        # Only admins can add doctors
-        # With this:
-        if not request.user.is_superuser and request.user.profile.role != 'admin':
-            messages.error(request, 'Only administrators can add doctors.')
-            return redirect('/admin/doctors/')
-
-        return render(request, 'add_doctor.html')
-
-    def post(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-
-        # Only admins can add doctors
-        if not request.user.is_superuser and request.user.profile.role != 'admin':
-            messages.error(request, 'Only administrators can add doctors.')
-            return redirect('/admin/doctors/')
-
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        first_name = request.POST.get('first_name', '')
-        last_name = request.POST.get('last_name', '')
-        password = request.POST.get('password')
-        phone = request.POST.get('phone', '')
-        department = request.POST.get('department', '')
-        license_number = request.POST.get('license_number', '')
-        role = request.POST.get('role', 'user')
-
-        # Validation
-        if not username or not email or not password:
-            messages.error(request, 'Username, email, and password are required.')
-            return render(request, 'add_doctor.html', {
-                'username': username,
-                'email': email,
-                'first_name': first_name,
-                'last_name': last_name,
-                'phone': phone,
-                'department': department,
-                'license_number': license_number,
-                'role': role,
-            })
-
-        # Check if username already exists
-        if User.objects.filter(username=username).exists():
-            messages.error(request, 'Username already exists.')
-            return render(request, 'add_doctor.html', {
-                'username': username,
-                'email': email,
-                'first_name': first_name,
-                'last_name': last_name,
-                'phone': phone,
-                'department': department,
-                'license_number': license_number,
-                'role': role,
-            })
-
-        # Check if email already exists
-        if User.objects.filter(email=email).exists():
-            messages.error(request, 'Email already exists.')
-            return render(request, 'add_doctor.html', {
-                'username': username,
-                'email': email,
-                'first_name': first_name,
-                'last_name': last_name,
-                'phone': phone,
-                'department': department,
-                'license_number': license_number,
-                'role': role,
-            })
-
-        # Create user
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name
-        )
-
-        # Update profile
-        user.profile.role = role
-        user.profile.phone = phone
-        user.profile.department = department
-        user.profile.license_number = license_number
-        user.profile.save()
-
-        messages.success(request, f'Doctor "{username}" has been created successfully.')
-        return redirect('/admin/doctors/')
-
-class EditDoctorView(View):
-    """GET /admin/user/<id>/edit/ - Edit user"""
-    def get(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-
-        try:
-            edit_user = User.objects.select_related('profile').get(id=user_id, is_superuser=False)
-        except User.DoesNotExist:
-            messages.error(request, 'User not found.')
-            return redirect('/admin/doctors/')
-
-        return render(request, 'admin_edit_doctors.html', {'edit_user': edit_user})
-
-    def post(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-
-        try:
-            edit_user = User.objects.select_related('profile').get(id=user_id, is_superuser=False)
-        except User.DoesNotExist:
-            messages.error(request, 'User not found.')
-            return redirect('/admin/doctors/')
-
-        # Update User fields
-        edit_user.first_name = request.POST.get('first_name', edit_user.first_name)
-        edit_user.last_name = request.POST.get('last_name', edit_user.last_name)
-        edit_user.email = request.POST.get('email', edit_user.email)
-        edit_user.save()
-
-        # Update Profile fields
-        edit_user.profile.role = request.POST.get('role', edit_user.profile.role)
-        edit_user.profile.phone = request.POST.get('phone') or edit_user.profile.phone
-        edit_user.profile.department = request.POST.get('department') or edit_user.profile.department
-        edit_user.profile.license_number = request.POST.get('license_number') or edit_user.profile.license_number
-        edit_user.profile.save()
-
-        # Handle password change
-        new_password = request.POST.get('password')
-        if new_password:
-            edit_user.set_password(new_password)
-            edit_user.save()
-
-        messages.success(request, f'User "{edit_user.username}" updated successfully!')
-        return redirect('/admin/doctors/')
-
-
-class AdminTechniciansView(View):
-    """GET /admin/technicians/ - List all senior technicians (POST to delete)"""
-
-    def _admin_check(self, request, redirect_to='/admin/technicians/'):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-        if request.user.profile.role != 'admin' and not request.user.is_superuser:
-            messages.error(request, 'Access denied.')
-            return redirect('/admin/')
-        return None
-
-    def get(self, request):
-        guard = self._admin_check(request)
-        if guard:
-            return guard
-
-        technicians_list = User.objects.select_related('profile').filter(
-            profile__role='senior_technician',
-            is_superuser=False
-        ).order_by('-date_joined')
-
-        paginator = Paginator(technicians_list, 25)
-        technicians = paginator.get_page(request.GET.get('page'))
-
-        return render(request, 'admin_technicians.html', {'technicians': technicians})
-
-    def post(self, request):
-        guard = self._admin_check(request)
-        if guard:
-            return guard
-
-        action = request.POST.get('action')
-        user_id = request.POST.get('user_id')
-
-        try:
-            user = User.objects.get(id=user_id, profile__role='senior_technician', is_superuser=False)
-        except User.DoesNotExist:
-            messages.error(request, 'Technician not found.')
-            return redirect('/admin/technicians/')
-
-        if action == 'delete':
-            name = user.get_full_name() or user.username
-            user.delete()
-            messages.success(request, f'Technician "{name}" deleted successfully.')
-
-        return redirect('/admin/technicians/')
-
-
-class AddTechnicianView(View):
-    """GET/POST /admin/technician/add/ — Create a senior technician (username = email)"""
-
-    def _admin_check(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/technician/add/')
-        if request.user.profile.role != 'admin' and not request.user.is_superuser:
-            messages.error(request, 'Only administrators can add technicians.')
-            return redirect('/admin/technicians/')
-        return None
-
-    def get(self, request):
-        guard = self._admin_check(request)
-        if guard:
-            return guard
-        return render(request, 'admin_add_technician.html')
-
-    def post(self, request):
-        guard = self._admin_check(request)
-        if guard:
-            return guard
-
-        email = request.POST.get('email', '').strip().lower()
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
-        password = request.POST.get('password', '')
-        phone = request.POST.get('phone', '').strip()
-        department = request.POST.get('department', '').strip()
-        employee_id = request.POST.get('employee_id', '').strip()
-
-        ctx = {
-            'email': email, 'first_name': first_name, 'last_name': last_name,
-            'phone': phone, 'department': department, 'employee_id': employee_id,
-        }
-
-        if not email or not password:
-            messages.error(request, 'Email and password are required.')
-            return render(request, 'admin_add_technician.html', ctx)
-
-        if User.objects.filter(username=email).exists() or User.objects.filter(email=email).exists():
-            messages.error(request, 'A user with this email already exists.')
-            return render(request, 'admin_add_technician.html', ctx)
-
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        user.profile.role = 'senior_technician'
-        user.profile.phone = phone
-        user.profile.department = department
-        user.profile.license_number = employee_id
-        user.profile.save()
-
-        messages.success(request, f'Technician "{email}" created successfully.')
-        return redirect('/admin/technicians/')
-
-
-class EditTechnicianView(View):
-    """GET/POST /admin/technician/<id>/edit/ — Edit a senior technician"""
-
-    def _get_technician(self, user_id):
-        try:
-            return User.objects.select_related('profile').get(
-                id=user_id, profile__role='senior_technician', is_superuser=False
-            )
-        except User.DoesNotExist:
-            return None
-
-    def get(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-        tech = self._get_technician(user_id)
-        if not tech:
-            messages.error(request, 'Technician not found.')
-            return redirect('/admin/technicians/')
-        return render(request, 'admin_edit_technician.html', {'tech': tech})
-
-    def post(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/')
-        tech = self._get_technician(user_id)
-        if not tech:
-            messages.error(request, 'Technician not found.')
-            return redirect('/admin/technicians/')
-
-        email = request.POST.get('email', '').strip().lower()
-        if email and email != tech.email:
-            if User.objects.filter(email=email).exclude(id=tech.id).exists():
-                messages.error(request, 'Email already in use.')
-                return render(request, 'admin_edit_technician.html', {'tech': tech})
-            tech.email = email
-            tech.username = email
-
-        tech.first_name = request.POST.get('first_name', tech.first_name).strip()
-        tech.last_name = request.POST.get('last_name', tech.last_name).strip()
-        tech.save()
-
-        tech.profile.phone = request.POST.get('phone', tech.profile.phone).strip()
-        tech.profile.department = request.POST.get('department', tech.profile.department).strip()
-        tech.profile.license_number = request.POST.get('employee_id', tech.profile.license_number).strip()
-        tech.profile.save()
-
-        new_password = request.POST.get('password', '').strip()
-        if new_password:
-            tech.set_password(new_password)
-            tech.save()
-
-        messages.success(request, f'Technician "{tech.email}" updated successfully.')
-        return redirect('/admin/technicians/')
-
-
-class AdminDoctorsDetailView(View):
-    """GET /admin/doctors/<user_id>/ - View detailed doctor information"""
-    def get(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/doctors/' + str(user_id))
-
-        # Only allow admins to view doctor details
-        if not request.user.is_superuser and request.user.profile.role != 'admin':
-            return redirect('/admin/')
-
-        target_user = get_object_or_404(User, pk=user_id)
-
-        # Count total unique patients tested by this doctor (via analyses)
-        # Do this BEFORE slicing to get accurate total count
-        total_tested_patients = Patient.objects.filter(
-            analyses__created_by=target_user
-        ).distinct().count()
-
-        # Get unique patients tested by this doctor
-        tested_patients = Patient.objects.filter(
-            analyses__created_by=target_user
-        ).distinct().order_by('-analyses__created_at')
-
-        from django.core.paginator import Paginator
-        patients_paginator = Paginator(tested_patients, 10)
-        patients_page = patients_paginator.get_page(request.GET.get('page'))
-
-        # Get user's analyses
-        analyses = Analysis.objects.filter(created_by=target_user).order_by('-created_at')
-        total_analyses = analyses.count()
-
-        # Calculate statistics
-        if total_analyses > 0:
-            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-            latest_analysis = analyses.first()
-        else:
-            avg_confidence = 0
-            latest_analysis = None
-
-        # Severity distribution
-        severity_counts = {}
-        for analysis in analyses:
-            label = analysis.predicted_label
-            severity_counts[label] = severity_counts.get(label, 0) + 1
-
-        # Recent activity
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_analyses = analyses.filter(created_at__gte=seven_days_ago).count()
-
-        context = {
-            'target_user': target_user,
-            'patients': patients_page,
-            'total_patients': total_tested_patients,
-            'analyses': analyses[:10],
-            'total_analyses': total_analyses,
-            'avg_confidence': round(avg_confidence * 100, 2),
-            'latest_analysis': latest_analysis,
-            'severity_counts': severity_counts,
-            'recent_analyses': recent_analyses,
-        }
-        return render(request, "admin_doctors_detail.html", context)
-
-
-class AdminUserHistoryView(View):
-    """GET /admin/user/<user_id>/history - View specific user's history (admin only)"""
-    def get(self, request, user_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/user/' + str(user_id) + '/history')
-
-        # Allow access if user is admin OR user (authenticated users can see the list)
-        # Comment out the strict admin check for now
-        # if request.user.profile.role != 'admin':
-        #     return redirect('/admin/')
-
-        target_user = get_object_or_404(User, pk=user_id)
-
-        analyses = Analysis.objects.filter(
-            created_by=target_user
-        ).filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).order_by('-created_at')
-
-        total_analyses = analyses.count()
-        if total_analyses > 0:
-            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-        else:
-            avg_confidence = 0
-
-        from django.core.paginator import Paginator
-        paginator = Paginator(analyses, 10)
-        analyses_page = paginator.get_page(request.GET.get('page'))
-
-        context = {
-            'target_user': target_user,
-            'analyses': analyses_page,
-            'total_analyses': total_analyses,
-            'avg_confidence': round(avg_confidence * 100, 2),
-        }
-        return render(request, "admin_user_history.html", context)
-
-
-class AdminPatientsView(View):
-    """GET /admin/patients - View and manage all patients created by doctors (admin only)"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/patients')
-
-        # Show patients created by doctors (from Patient model, not User model)
-        patients = Patient.objects.select_related(
-            'created_by', 'created_by__profile'
-        ).order_by('-created_at')
-
-        # Get filter parameters
-        date_from = request.GET.get('date_from')
-        date_to = request.GET.get('date_to')
-
-        # Apply date filters if provided
-        if date_from:
-            from datetime import datetime
-            try:
-                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
-                # Make it timezone-aware
-                from django.utils import timezone
-                date_from_obj = timezone.make_aware(date_from_obj)
-                patients = patients.filter(created_at__gte=date_from_obj)
-            except ValueError:
-                pass
-
-        if date_to:
-            from datetime import datetime, timedelta
-            try:
-                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
-                # Include the entire day (add 1 day)
-                from django.utils import timezone
-                date_to_obj = timezone.make_aware(date_to_obj) + timedelta(days=1)
-                patients = patients.filter(created_at__lt=date_to_obj)
-            except ValueError:
-                pass
-
-        total_patients = patients.count()
-
-        from django.utils import timezone
-        now = timezone.now()
-        first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        new_patients_month = patients.filter(created_at__gte=first_day_of_month).count()
-
-        from django.core.paginator import Paginator
-        paginator = Paginator(patients, 25)
-        page_number = request.GET.get('page')
-        patients_page = paginator.get_page(page_number)
-
-        context = {
-            'patients': patients_page,
-            'total_users': total_patients,  # Keep same template variable name
-            'new_users_month': new_patients_month,  # Keep same template variable name
-            'active_users': Patient.objects.count(),  # Keep same template variable name
-            'date_from': date_from,
-            'date_to': date_to,
-        }
-        return render(request, "admin_registered_users.html", context)
-
-
-class AdminTestResultsView(View):
-    """GET /admin/test-results - View all test results"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/test-results')
-
-        user_role = request.user.profile.role
-
-        if user_role == 'admin':
-            analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile', 'patient'
-            ).all()
-        else:
-            analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile', 'patient'
-            ).filter(created_by=request.user)
-
-        # Filter out non-primary batch analyses
-        analyses = analyses.filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).order_by('-created_at')
-
-        # Global counts for tab badges (always unfiltered)
-        doctor_count = analyses.filter(created_by__profile__role='user').count()
-        technician_count = analyses.filter(created_by__profile__role='senior_technician').count()
-        total_all = analyses.count()
-
-        # Role filter (doctor / senior_technician / all)
-        role_filter = request.GET.get('role', '')
-        if role_filter in ('user', 'senior_technician'):
-            analyses = analyses.filter(created_by__profile__role=role_filter)
-
-        total_analyses = total_all
-
-        severity_counts = {}
-        for analysis in analyses:
-            label = analysis.predicted_label
-            severity_counts[label] = severity_counts.get(label, 0) + 1
-
-        seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_analyses = analyses.filter(created_at__gte=seven_days_ago).count()
-
-        from django.core.paginator import Paginator
-        paginator = Paginator(analyses, 10)
-        page_number = request.GET.get('page')
-        analyses_page = paginator.get_page(page_number)
-
-        analyses_with_pct = []
-        for analysis in analyses_page:
-            analyses_with_pct.append({
-                'analysis': analysis,
-                'confidence_pct': round(analysis.confidence * 100, 1),
-            })
-
-        context = {
-            'analyses': analyses_page,
-            'analyses_with_pct': analyses_with_pct,
-            'total_analyses': total_analyses,
-            'total_all': total_all,
-            'doctor_count': doctor_count,
-            'technician_count': technician_count,
-            'severity_counts': severity_counts,
-            'recent_analyses': recent_analyses,
-            'user_role': user_role,
-            'role_filter': role_filter,
-        }
-        return render(request, "admin_test_results.html", context)
-
-
-class AdminTestHistoryView(View):
-    """GET /admin/test-history - View detailed test history"""
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/test-history')
-
-        user_role = request.user.profile.role
-
-        if user_role == 'admin':
-            analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile', 'patient'
-            ).all()
-        else:
-            analyses = Analysis.objects.select_related(
-                'created_by', 'created_by__profile', 'patient'
-            ).filter(created_by=request.user)
-
-        # Filter out non-primary batch analyses (show only the primary analysis from each batch)
-        # This prevents showing 10 separate entries when user uploads 10 images as a batch
-        analyses = analyses.filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).order_by('-created_at')
-
-        total_analyses = analyses.count()
-
-        if total_analyses > 0:
-            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-        else:
-            avg_confidence = 0
-
-        from django.core.paginator import Paginator
-        paginator = Paginator(analyses, 50)
-        page_number = request.GET.get('page')
-        analyses_page = paginator.get_page(page_number)
-
-        context = {
-            'analyses': analyses_page,
-            'total_analyses': total_analyses,
-            'avg_confidence': round(avg_confidence * 100, 2),
-            'user_role': user_role,
-        }
-        return render(request, "admin_test_history.html", context)
-
-
-class AdminPatientProfileView(View):
-    """GET /admin/patient/<patient_id> - View patient details and test results"""
-    def get(self, request, patient_id):
-        if not request.user.is_authenticated:
-            return redirect('/login/?next=/admin/patient/' + str(patient_id))
-
-        try:
-            patient = Patient.objects.select_related('created_by').get(patient_id=patient_id)
-        except Patient.DoesNotExist:
-            return redirect('/admin/patients/')
-
-        analyses = Analysis.objects.filter(patient=patient).filter(
-            Q(batch_id__isnull=True) | Q(is_batch_primary=True)
-        ).order_by('-created_at')
-        total_analyses = analyses.count()
-
-        treatments = TreatmentRecord.objects.filter(patient=patient).order_by('-start_date')[:10]
-        follow_ups = FollowUpRecord.objects.filter(patient=patient).order_by('-scheduled_date')[:10]
-        screening_records = ScreeningRecord.objects.filter(patient=patient).order_by('-screening_date')[:10]
-
-        if total_analyses > 0:
-            avg_confidence = sum(a.confidence for a in analyses) / total_analyses
-            latest_analysis = analyses.first()
-        else:
-            avg_confidence = 0
-            latest_analysis = None
-
-        severity_dist = {}
-        for analysis in analyses:
-            label = analysis.predicted_label
-            severity_dist[label] = severity_dist.get(label, 0) + 1
-
-        severity_distribution = [
-            (label, count, round((count / total_analyses) * 100, 1) if total_analyses > 0 else 0)
-            for label, count in severity_dist.items()
-        ]
-
-        from django.core.paginator import Paginator
-
-        def enrich(qs):
-            result = []
-            for a in qs:
-                result.append({
-                    'analysis_id': a.analysis_id,
-                    'predicted_class': a.predicted_class,
-                    'predicted_label': a.predicted_label,
-                    'confidence': a.confidence,
-                    'confidence_pct': round(a.confidence * 100, 1),
-                    'uncertainty': a.uncertainty,
-                    'uncertainty_pct': round(a.uncertainty * 100, 1),
-                    'confidence_level': a.confidence_level,
-                    'recommendation': a.recommendation,
-                    'image': a.image,
-                    'created_at': a.created_at,
-                })
-            return result
-
-        paginator = Paginator(analyses, 10)
-        analyses_page = paginator.get_page(request.GET.get('page'))
-        analyses_list = enrich(analyses_page)
-
-        context = {
-            'patient': patient,
-            'analyses': analyses_list,
-            'analyses_page': analyses_page,
-            'total_analyses': total_analyses,
-            'avg_confidence': round(avg_confidence * 100, 2),
-            'latest_analysis': latest_analysis,
-            'severity_distribution': severity_distribution,
-            'treatments': treatments,
-            'follow_ups': follow_ups,
-            'screening_records': screening_records,
-        }
-        return render(request, "admin_patient_profile.html", context)
-
-
 def generate_results_frames(analysis_records, predictions_list):
     """
     Generates individual overlaid frames from the analyzed images.
@@ -2779,45 +2102,114 @@ def generate_results_frames(analysis_records, predictions_list):
     return frame_urls
 
 
+# ── Shared helpers for the analyze endpoints ────────────────────────────────
+ANALYZE_MAX_FILES = 200
+ANALYZE_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
+
+
+def analyze_guard(request, files, max_files=ANALYZE_MAX_FILES):
+    """Shared pre-checks for the analyze endpoints. Returns an error Response or None."""
+    if request.user.profile.role == 'patient':
+        return Response(
+            {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if len(files) > max_files:
+        return Response({"error": f"Maximum {max_files} images allowed"}, status=400)
+    if not files:
+        return Response({"error": "No image files provided"}, status=status.HTTP_400_BAD_REQUEST)
+    return None
+
+
+def store_batch_aggregated(analysis_records, averaged_prediction, predictions_list, files, recommended_checkups):
+    """Persist averaged batch results onto the primary analysis record (multi-image only)."""
+    if len(files) > 1 and analysis_records:
+        primary = analysis_records[0]
+        primary.batch_aggregated_data = {
+            "averaged_prediction": {
+                "predicted_class": averaged_prediction["predicted_class"],
+                "predicted_label": averaged_prediction["predicted_label"],
+                "stage_label": averaged_prediction.get("stage_label"),
+                "probabilities": averaged_prediction["probabilities"],
+                "confidence": averaged_prediction["confidence"],
+                "confidence_level": averaged_prediction.get("confidence_level"),
+                "risk_level": averaged_prediction.get("risk_level"),
+                "risk_color": averaged_prediction.get("risk_color"),
+                "recommendation": averaged_prediction.get("recommendation"),
+                "explanation": averaged_prediction.get("explanation"),
+            },
+            "images_analyzed": len(predictions_list),
+            "images_total": len(files),
+            "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
+            "recommended_checkups": recommended_checkups,
+        }
+        primary.save(update_fields=['batch_aggregated_data'])
+
+
+def build_analyze_response(averaged_prediction, predictions_list, analysis_records, files,
+                           recommended_checkups, patient, invalid_images, frame_urls=None):
+    """Assemble the shared analyze API response payload."""
+    individual_results = [
+        {
+            "analysis_id": str(record.analysis_id),
+            "predicted_class": pred["predicted_class"],
+            "predicted_label": pred["predicted_label"],
+            "confidence": pred["confidence"],
+            "image_url": record.image.url if record.image else None,
+        }
+        for record, pred in zip(analysis_records, predictions_list)
+    ]
+    resp = {
+        "predicted_class": averaged_prediction["predicted_class"],
+        "predicted_label": averaged_prediction["predicted_label"],
+        "stage_label": averaged_prediction["stage_label"],
+        "probabilities": averaged_prediction["probabilities"],
+        "confidence": averaged_prediction["confidence"],
+        "confidence_level": averaged_prediction["confidence_level"],
+        "risk_level": averaged_prediction["risk_level"],
+        "risk_color": averaged_prediction["risk_color"],
+        "recommendation": averaged_prediction["recommendation"],
+        "explanation": averaged_prediction["explanation"],
+        "images_analyzed": len(predictions_list),
+        "images_total": len(files),
+        "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
+        "individual_analyses": [str(a.analysis_id) for a in analysis_records],
+        "individual_results": individual_results,
+        "recommended_checkups": recommended_checkups,
+        "patient": {
+            "patient_id": str(patient.patient_id) if patient else None,
+            "full_name": patient.full_name if patient else None,
+            "age": patient.age if patient else None,
+        } if patient else None,
+    }
+    if frame_urls is not None:
+        resp["frame_urls"] = frame_urls
+    if invalid_images:
+        resp["validation_warnings"] = [
+            {"filename": img["filename"], "reason": img["reason"], "score": img["score"]}
+            for img in invalid_images
+        ]
+        resp["validation_warning"] = (
+            f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
+            "Results are based on the remaining valid images."
+        )
+    return resp
+
+
 class AnalyzeView(APIView):
     """POST /v1/analyze — upload multiple images, run AI staging on each, return averaged result."""
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [CanAnalyze]
 
     def post(self, request):
-        # Prevent patients from performing analysis
-        if request.user.profile.role == 'patient':
-            return Response(
-                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # Get all files from request (supports both single and multiple uploads)
         files = request.FILES.getlist('file')
-        MAX_FILES = 200
+        guard = analyze_guard(request, files)
+        if guard:
+            return guard
 
-        if len(files) > MAX_FILES:
-            return Response(
-                {
-                    "error": f"Maximum {MAX_FILES} images allowed"
-                },
-                status=400
-            )
-        if not files:
-            return Response(
-                {"error": "No image files provided"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Check if heatmap generation should be skipped (for batch processing performance)
-        skip_heatmap = request.query_params.get('skip_heatmap', '').lower() in ('true', '1', 'yes')
-        if skip_heatmap:
-            print("[DEBUG] Heatmap generation DISABLED for faster batch processing")
-
-        # Log for debugging
         safe_print(f"[DEBUG] Received {len(files)} files for analysis")
 
-        allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
+        allowed_types = ANALYZE_ALLOWED_TYPES
         svc = VPSInferenceService.get()
 
         if svc.session is None:
@@ -2828,6 +2220,10 @@ class AnalyzeView(APIView):
 
         recommended_checkups = get_selected_checkups(request)
         batch_id = uuid.uuid4() if len(files) > 1 else None
+        patient_id = request.data.get('patient_id')
+        patient, patient_error = get_allowed_patient_for_user(request.user, patient_id)
+        if patient_error:
+            return patient_error
 
         # ── Phase 1: validate MIME + image quality ───────────────────────
         invalid_images = []
@@ -2867,14 +2263,6 @@ class AnalyzeView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # ── Phase 3: look up patient once, store DB records ───────────────
-        patient_id = request.data.get('patient_id')
-        patient = None
-        if patient_id:
-            try:
-                patient = Patient.objects.get(patient_id=patient_id)
-            except Patient.DoesNotExist:
-                safe_print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
-
         predictions_list = []
         analysis_records = []
         _DB_SKIP = {"stage_label", "risk_level", "risk_color", "explanation",
@@ -2909,524 +2297,48 @@ class AnalyzeView(APIView):
         averaged_prediction = svc.average_predictions(predictions_list)
 
         # Store aggregated data in the primary analysis if it's a batch
-        if batch_id and analysis_records:
-            primary_analysis = analysis_records[0]
-            primary_analysis.batch_aggregated_data = {
-                "averaged_prediction": {
-                    "predicted_class": averaged_prediction["predicted_class"],
-                    "predicted_label": averaged_prediction["predicted_label"],
-                    "stage_label": averaged_prediction.get("stage_label"),
-                    "probabilities": averaged_prediction["probabilities"],
-                    "confidence": averaged_prediction["confidence"],
-                    "uncertainty": averaged_prediction.get("uncertainty"),
-                    "confidence_level": averaged_prediction.get("confidence_level"),
-                    "risk_level": averaged_prediction.get("risk_level"),
-                    "risk_color": averaged_prediction.get("risk_color"),
-                    "confidence_interpretation": averaged_prediction.get("confidence_interpretation"),
-                    "recommendation": averaged_prediction.get("recommendation"),
-                    "explanation": averaged_prediction.get("explanation"),
-                },
-                "images_analyzed": len(predictions_list),
-                "images_total": len(files),
-                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
-                "recommended_checkups": recommended_checkups,
-            }
-            primary_analysis.save()
-            safe_print(f"[DEBUG] ✓ Updated primary analysis with aggregated data")
+        store_batch_aggregated(analysis_records, averaged_prediction, predictions_list, files, recommended_checkups)
 
+        # Notify the assigned doctor when a technician runs an analysis
+        role = getattr(getattr(request.user, 'profile', None), 'role', None)
+        if role == 'senior_technician' and patient and patient.assigned_doctor and analysis_records:
+            Notification.notify(
+                patient.assigned_doctor,
+                f"{request.user.get_full_name() or request.user.username} ran an AI analysis for {patient.full_name}",
+                url=f"/doctor/analysis/{analysis_records[0].analysis_id}",
+            )
 
         # Generate frames of the results
         frame_urls = []
         if len(files) <= 30:
-            frame_urls = generate_results_frames(
-                analysis_records,
-                predictions_list
-    )
+            frame_urls = generate_results_frames(analysis_records, predictions_list)
 
-        # Build response with averaged results
-        # Build individual results with their classifications
-        individual_results = []
-        for idx, (pred, record) in enumerate(zip(predictions_list, analysis_records)):
-            individual_results.append({
-                "analysis_id": str(record.analysis_id),
-                "predicted_class": pred["predicted_class"],
-                "predicted_label": pred["predicted_label"],
-                "confidence": pred["confidence"],
-                "image_url": record.image.url if record.image else None,
-            })
-
-        resp = {
-            "predicted_class": averaged_prediction["predicted_class"],
-            "predicted_label": averaged_prediction["predicted_label"],
-            "stage_label": averaged_prediction["stage_label"],
-            "probabilities": averaged_prediction["probabilities"],
-            "confidence": averaged_prediction["confidence"],
-            "uncertainty": averaged_prediction["uncertainty"],
-            "confidence_level": averaged_prediction["confidence_level"],
-            "risk_level": averaged_prediction["risk_level"],
-            "risk_color": averaged_prediction["risk_color"],
-            "confidence_interpretation": averaged_prediction["confidence_interpretation"],
-            "recommendation": averaged_prediction["recommendation"],
-            "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(predictions_list),
-            "images_total": len(files),
-            "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
-            "individual_analyses": [str(a.analysis_id) for a in analysis_records],
-            "individual_results": individual_results,
-            "frame_urls": frame_urls,
-            "recommended_checkups": recommended_checkups,
-            "patient": {
-                "patient_id": str(patient.patient_id) if patient else None,
-                "full_name": patient.full_name if patient else None,
-                "age": patient.age if patient else None,
-            } if patient else None,
-        }
-
-        # Add validation warnings if any images were rejected
-        if invalid_images:
-            resp["validation_warnings"] = [
-                {
-                    "filename": img["filename"],
-                    "reason": img["reason"],
-                    "score": img["score"]
-                }
-                for img in invalid_images
-            ]
-            resp["validation_warning"] = (
-                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
-                "Results are based on the remaining valid images."
-            )
-            safe_print(f"[WARN] Rejected {len(invalid_images)} invalid images")
-
+        resp = build_analyze_response(
+            averaged_prediction, predictions_list, analysis_records, files,
+            recommended_checkups, patient, invalid_images, frame_urls=frame_urls,
+        )
         return Response(resp, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
-class FastAnalyzeView(APIView):
-    """POST /api/v1/analyze/fast - Fast analysis for large images.
-    Uses optimized preprocessing for faster results."""
-    parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        # Prevent patients from performing analysis
-        if request.user.profile.role == 'patient':
-            return Response(
-                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        files = request.FILES.getlist('file')
-        MAX_FILES = 200
-
-        if len(files) > MAX_FILES:
-            return Response(
-                {"error": f"Maximum {MAX_FILES} images allowed"},
-                status=400
-            )
-        if not files:
-            return Response(
-                {"error": "No image files provided"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        skip_heatmap = request.query_params.get('skip_heatmap', 'true').lower() in ('true', '1', 'yes')
-
-        print(f"[FAST] Received {len(files)} files for fast analysis")
-
-        allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
-        svc = InferenceService.get()
-
-        if svc.session is None:
-            return Response(
-                {"error": "Model not loaded. Please contact support."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        predictions_list = []
-        analysis_records = []
-        invalid_images = []
-        recommended_checkups = get_selected_checkups(request)
-
-        # Generate batch_id for multi-image uploads
-        batch_id = uuid.uuid4() if len(files) > 1 else None
-
-        for idx, image_file in enumerate(files):
-            if image_file.content_type not in allowed_types:
-                return Response(
-                    {"error": f"File {idx+1} ({image_file.name}): Unsupported type {image_file.content_type}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Validate image quality for cytology analysis
-            validation_result = ImageValidator.validate_file(image_file)
-            print(f"[FAST] Image {idx+1} validation score: {validation_result['score']}/100")
-
-            if not validation_result["is_valid"]:
-                invalid_images.append({
-                    "index": idx + 1,
-                    "filename": image_file.name,
-                    "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
-                    "score": validation_result["score"]
-                })
-                print(f"[FAST][WARN] Image {idx+1} failed validation")
-                continue
-
-            try:
-                safe_print(f"[FAST] Processing file {idx+1}/{len(files)}: {image_file.name}")
-                prediction = svc.predict(
-                    image_file,
-                    mode='fast',
-                    skip_heatmap=skip_heatmap
-                )
-                predictions_list.append(prediction)
-
-                image_file.seek(0)
-                # Remove fields not in Analysis model
-                extra_fields = {}
-                for key in ("stage_label", "risk_level", "risk_color", "explanation", "confidence_interpretation", "inference_time", "heatmap"):
-                    if key in prediction:
-                        extra_fields[key] = prediction.pop(key)
-
-                # Get patient_id from request
-                patient_id = request.data.get('patient_id')
-                patient = None
-                if patient_id:
-                    try:
-                        patient = Patient.objects.get(patient_id=patient_id)
-                    except Patient.DoesNotExist:
-                        print(f"[FAST][WARN] Patient {patient_id} not found, proceeding without patient link")
-
-                image_file.seek(0)
-                analysis = Analysis.objects.create(
-                    created_by=request.user,
-                    patient=patient,
-                    image=image_file,
-                    **prediction,
-                    recommended_checkups=recommended_checkups,
-                    # Batch metadata
-                    batch_id=batch_id,
-                    is_batch_primary=(idx == 0 and len(files) > 1),
-                    batch_total_count=len(files) if len(files) > 1 else None,
-                    batch_position=idx + 1 if len(files) > 1 else None,
-                )
-                analysis_records.append(analysis)
-                print(f"[FAST] ✓ Stored analysis for file {idx+1}")
-
-            except RuntimeError as e:
-                return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        print(f"[FAST] Averaging {len(predictions_list)} predictions")
-
-        # Handle case where all images were rejected
-        if len(predictions_list) == 0:
-            return Response({
-                "error": "No valid images could be analyzed",
-                "invalid_images": invalid_images,
-                "message": f"All {len(files)} uploaded images failed quality validation. "
-                          "Please ensure you are uploading valid cervical cytology/cell sample images."
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        averaged_prediction = svc.average_predictions(predictions_list)
-
-        # Update primary analysis with aggregated data
-        if len(files) > 1 and analysis_records:
-            primary_analysis = analysis_records[0]
-            primary_analysis.batch_aggregated_data = {
-                "averaged_prediction": {
-                    "predicted_class": averaged_prediction["predicted_class"],
-                    "predicted_label": averaged_prediction["predicted_label"],
-                    "stage_label": averaged_prediction["stage_label"],
-                    "probabilities": averaged_prediction["probabilities"],
-                    "confidence": averaged_prediction["confidence"],
-                    "uncertainty": averaged_prediction["uncertainty"],
-                    "confidence_level": averaged_prediction["confidence_level"],
-                    "risk_level": averaged_prediction["risk_level"],
-                    "risk_color": averaged_prediction["risk_color"],
-                    "confidence_interpretation": averaged_prediction["confidence_interpretation"],
-                    "recommendation": averaged_prediction["recommendation"],
-                    "explanation": averaged_prediction["explanation"],
-                },
-                "images_analyzed": len(predictions_list),
-                "images_total": len(files),
-                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
-                "recommended_checkups": recommended_checkups,
-            }
-            primary_analysis.save(update_fields=['batch_aggregated_data'])
-
-        individual_results = []
-        for record, pred in zip(analysis_records, predictions_list):
-            individual_results.append({
-                "analysis_id": str(record.analysis_id),
-                "predicted_class": pred["predicted_class"],
-                "predicted_label": pred["predicted_label"],
-                "confidence": pred["confidence"],
-                "image_url": record.image.url if record.image else None,
-            })
-
-        resp = {
-            "predicted_class": averaged_prediction["predicted_class"],
-            "predicted_label": averaged_prediction["predicted_label"],
-            "stage_label": averaged_prediction["stage_label"],
-            "probabilities": averaged_prediction["probabilities"],
-            "confidence": averaged_prediction["confidence"],
-            "uncertainty": averaged_prediction["uncertainty"],
-            "confidence_level": averaged_prediction["confidence_level"],
-            "risk_level": averaged_prediction["risk_level"],
-            "risk_color": averaged_prediction["risk_color"],
-            "confidence_interpretation": averaged_prediction["confidence_interpretation"],
-            "recommendation": averaged_prediction["recommendation"],
-            "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(predictions_list),
-            "images_total": len(files),
-            "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
-            "individual_analyses": [str(a.analysis_id) for a in analysis_records],
-            "individual_results": individual_results,
-            "recommended_checkups": recommended_checkups,
-            "patient": {
-                "patient_id": str(patient.patient_id) if patient else None,
-                "full_name": patient.full_name if patient else None,
-                "age": patient.age if patient else None,
-            } if patient else None,
-        }
-
-        # Add validation warnings if any images were rejected
-        if invalid_images:
-            resp["validation_warnings"] = [
-                {
-                    "filename": img["filename"],
-                    "reason": img["reason"],
-                    "score": img["score"]
-                }
-                for img in invalid_images
-            ]
-            resp["validation_warning"] = (
-                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
-                "Results are based on the remaining valid images."
-            )
-            print(f"[FAST][WARN] Rejected {len(invalid_images)} invalid images")
-
-        return Response(resp, status=status.HTTP_201_CREATED)
+class FastAnalyzeView(AnalyzeView):
+    """POST /api/v1/analyze/fast — same batched inference pipeline as AnalyzeView.
+    Kept as a separate endpoint so the frontend's mode selection keeps working."""
+    pass
 
 
 @method_decorator(csrf_exempt, name='dispatch')
-class VPSAnalyzeView(APIView):
-    """POST /api/v1/analyze/vps - VPS-optimized analysis for large images.
-    Ultra-fast processing for slow VPS servers."""
-    parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        # Prevent patients from performing analysis
-        if request.user.profile.role == 'patient':
-            return Response(
-                {"error": "Patients cannot perform analysis. Please contact your healthcare provider."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        files = request.FILES.getlist('file')
-        MAX_FILES = 200
-
-        if len(files) > MAX_FILES:
-            return Response(
-                {"error": f"Maximum {MAX_FILES} images allowed"},
-                status=400
-            )
-        if not files:
-            return Response(
-                {"error": "No image files provided"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        print(f"[ULTRA] Received {len(files)} files (Ultra-fast mode)")
-
-        allowed_types = {"image/jpeg", "image/png", "image/bmp", "image/tiff"}
-        svc = InferenceService.get()
-
-        if svc.session is None:
-            return Response(
-                {"error": "Model not loaded. Please contact support."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        predictions_list = []
-        analysis_records = []
-        invalid_images = []
-        recommended_checkups = get_selected_checkups(request)
-
-        # Generate batch_id for multi-image uploads
-        batch_id = uuid.uuid4() if len(files) > 1 else None
-
-        for idx, image_file in enumerate(files):
-            if image_file.content_type not in allowed_types:
-                return Response(
-                    {"error": f"File {idx+1}: Unsupported type {image_file.content_type}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Validate image quality for cytology analysis
-            validation_result = ImageValidator.validate_file(image_file)
-            print(f"[ULTRA] Image {idx+1} validation score: {validation_result['score']}/100")
-
-            if not validation_result["is_valid"]:
-                invalid_images.append({
-                    "index": idx + 1,
-                    "filename": image_file.name,
-                    "reason": validation_result["errors"][0][1] if validation_result["errors"] else "Unknown",
-                    "score": validation_result["score"]
-                })
-                print(f"[ULTRA][WARN] Image {idx+1} failed validation")
-                continue
-
-            try:
-                safe_print(f"[ULTRA] Processing {idx+1}/{len(files)}: {image_file.name} ({image_file.size/1024/1024:.1f} MB)")
-                prediction = svc.predict(image_file, mode='ultra', skip_heatmap=True)
-                predictions_list.append(prediction)
-
-                # Store in database (only use fields that exist in the model)
-                image_file.seek(0)
-
-                # Get patient_id from request
-                patient_id = request.data.get('patient_id')
-                patient = None
-                if patient_id:
-                    try:
-                        patient = Patient.objects.get(patient_id=patient_id)
-                    except Patient.DoesNotExist:
-                        safe_print(f"[WARN] Patient {patient_id} not found, proceeding without patient link")
-
-                analysis = Analysis.objects.create(
-                    created_by=request.user,
-                    patient=patient,
-                    image=image_file,
-                    predicted_class=prediction["predicted_class"],
-                    predicted_label=prediction["predicted_label"],
-                    probabilities=prediction["probabilities"],
-                    confidence=prediction["confidence"],
-                    uncertainty=prediction["uncertainty"],
-                    confidence_level=prediction["confidence_level"],
-                    recommendation=prediction["recommendation"],
-                    recommended_checkups=recommended_checkups,
-                    # Batch metadata
-                    batch_id=batch_id,
-                    is_batch_primary=(idx == 0 and len(files) > 1),
-                    batch_total_count=len(files) if len(files) > 1 else None,
-                    batch_position=idx + 1 if len(files) > 1 else None,
-                )
-                analysis_records.append(analysis)
-                print(f"[ULTRA] ✓ {idx+1}/{len(files)} complete")
-
-            except RuntimeError as e:
-                return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        print(f"[ULTRA] Averaging {len(predictions_list)} predictions")
-
-        # Handle case where all images were rejected
-        if len(predictions_list) == 0:
-            return Response({
-                "error": "No valid images could be analyzed",
-                "invalid_images": invalid_images,
-                "message": f"All {len(files)} uploaded images failed quality validation. "
-                          "Please ensure you are uploading valid cervical cytology/cell sample images."
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        averaged_prediction = svc.average_predictions(predictions_list)
-
-        # Update primary analysis with aggregated data
-        if len(files) > 1 and analysis_records:
-            primary_analysis = analysis_records[0]
-            primary_analysis.batch_aggregated_data = {
-                "averaged_prediction": {
-                    "predicted_class": averaged_prediction["predicted_class"],
-                    "predicted_label": averaged_prediction["predicted_label"],
-                    "stage_label": averaged_prediction.get("stage_label"),
-                    "probabilities": averaged_prediction["probabilities"],
-                    "confidence": averaged_prediction["confidence"],
-                    "uncertainty": averaged_prediction.get("uncertainty"),
-                    "confidence_level": averaged_prediction.get("confidence_level"),
-                    "risk_level": averaged_prediction.get("risk_level"),
-                    "risk_color": averaged_prediction.get("risk_color"),
-                    "confidence_interpretation": averaged_prediction.get("confidence_interpretation"),
-                    "recommendation": averaged_prediction.get("recommendation"),
-                    "explanation": averaged_prediction.get("explanation"),
-                },
-                "images_analyzed": len(predictions_list),
-                "images_total": len(files),
-                "individual_analysis_ids": [str(a.analysis_id) for a in analysis_records],
-                "recommended_checkups": recommended_checkups,
-            }
-            primary_analysis.save(update_fields=['batch_aggregated_data'])
-
-        # Generate frames for slideshow (only for <= 30 images to save time)
-        frame_urls = []
-        if len(predictions_list) <= 30:
-            print(f"[ULTRA] Generating {len(predictions_list)} frames for slideshow...")
-            frame_urls = generate_results_frames(
-                analysis_records,
-                predictions_list
-            )
-
-        individual_results = []
-        for record, pred in zip(analysis_records, predictions_list):
-            individual_results.append({
-                "analysis_id": str(record.analysis_id),
-                "predicted_class": pred["predicted_class"],
-                "predicted_label": pred["predicted_label"],
-                "confidence": pred["confidence"],
-                "image_url": record.image.url if record.image else None,
-            })
-
-        resp = {
-            "predicted_class": averaged_prediction["predicted_class"],
-            "predicted_label": averaged_prediction["predicted_label"],
-            "stage_label": averaged_prediction["stage_label"],
-            "probabilities": averaged_prediction["probabilities"],
-            "confidence": averaged_prediction["confidence"],
-            "uncertainty": averaged_prediction["uncertainty"],
-            "confidence_level": averaged_prediction["confidence_level"],
-            "risk_level": averaged_prediction["risk_level"],
-            "risk_color": averaged_prediction["risk_color"],
-            "confidence_interpretation": averaged_prediction["confidence_interpretation"],
-            "recommendation": averaged_prediction["recommendation"],
-            "explanation": averaged_prediction["explanation"],
-            "images_analyzed": len(predictions_list),
-            "images_total": len(files),
-            "analysis_id": str(analysis_records[0].analysis_id) if analysis_records else None,
-            "individual_analyses": [str(a.analysis_id) for a in analysis_records],
-            "individual_results": individual_results,
-            "frame_urls": frame_urls,
-            "recommended_checkups": recommended_checkups,
-            "patient": {
-                "patient_id": str(patient.patient_id) if patient else None,
-                "full_name": patient.full_name if patient else None,
-                "age": patient.age if patient else None,
-            } if patient else None,
-        }
-
-        # Add validation warnings if any images were rejected
-        if invalid_images:
-            resp["validation_warnings"] = [
-                {
-                    "filename": img["filename"],
-                    "reason": img["reason"],
-                    "score": img["score"]
-                }
-                for img in invalid_images
-            ]
-            resp["validation_warning"] = (
-                f"{len(invalid_images)} of {len(files)} images were rejected due to quality validation. "
-                "Results are based on the remaining valid images."
-            )
-            print(f"[ULTRA][WARN] Rejected {len(invalid_images)} invalid images")
-
-        return Response(resp, status=status.HTTP_201_CREATED)
+class VPSAnalyzeView(AnalyzeView):
+    """POST /api/v1/analyze/vps — same batched inference pipeline as AnalyzeView.
+    Kept as a separate endpoint so the frontend's mode selection keeps working."""
+    pass
 
 
 class HealthView(APIView):
     """GET /v1/health"""
 
     def get(self, request):
-        model_loaded = InferenceService.get().session is not None
+        model_loaded = VPSInferenceService.get().session is not None
         return Response({"status": "ok", "model_loaded": model_loaded})
 
 
@@ -3887,30 +2799,100 @@ class ReportView(APIView):
             content.append(rec_t)
             content.append(Spacer(1, 0.4*cm))
 
-        if analysis.recommended_checkups:
-            content.append(section('Patient Checkups Sent'))
+        # Technician's Pap smear report and the doctor's review for this patient
+        pap_smear = None
+        checkup = None
+        if patient:
+            from .models import CheckupRecommendation, PapSmearTest
+            pap_smear = PapSmearTest.objects.filter(
+                patient=patient
+            ).select_related('technician').order_by('-test_date').first()
+            checkup = CheckupRecommendation.objects.filter(
+                patient=patient
+            ).select_related('doctor').order_by('-created_at').first()
+
+        if pap_smear:
+            content.append(section('Lab Technician Report'))
             content.append(divider())
-            checkup_cells = [
-                [Paragraph(f'✓  {c}', ParagraphStyle(
-                    'ck', parent=styles['Normal'], fontSize=9,
-                    textColor=colors.HexColor('#1e40af')))]
-                for c in analysis.recommended_checkups
-            ]
-            ck_t = Table(checkup_cells, colWidths=[INNER_W])
-            ck_t.setStyle(TableStyle([
-                ('BACKGROUND',    (0,0),(-1,-1), colors.HexColor('#eff6ff')),
-                ('BOX',           (0,0),(-1,-1), 0.5, colors.HexColor('#bfdbfe')),
-                ('TOPPADDING',    (0,0),(-1,-1), 5),
-                ('BOTTOMPADDING', (0,0),(-1,-1), 5),
-                ('LEFTPADDING',   (0,0),(-1,-1), 10),
+            content.append(kv_table([
+                ('Pap Smear Result', 'Positive (+ve)' if pap_smear.result == '+ve' else 'Negative (-ve)'),
+                ('Performed By', pap_smear.technician.get_full_name() if pap_smear.technician else '—'),
+                ('Test Date', pap_smear.test_date.strftime('%d %b %Y')),
+                ('Technician Notes', pap_smear.notes or '—'),
             ]))
-            content.append(ck_t)
+            content.append(Spacer(1, 0.4*cm))
+
+        # Doctor's recommended checkups (fall back to AI-suggested checkups)
+        doctor_checkups = checkup.recommended_list() if checkup else list(analysis.recommended_checkups or [])
+        if doctor_checkups or (checkup and checkup.treatment_follow_up):
+            content.append(section('Doctor Review & Recommended Checkups'))
+            content.append(divider())
+            if doctor_checkups:
+                checkup_cells = [
+                    [Paragraph(f'✓  {c}', ParagraphStyle(
+                        'ck', parent=styles['Normal'], fontSize=9,
+                        textColor=colors.HexColor('#1e40af')))]
+                    for c in doctor_checkups
+                ]
+                ck_t = Table(checkup_cells, colWidths=[INNER_W])
+                ck_t.setStyle(TableStyle([
+                    ('BACKGROUND',    (0,0),(-1,-1), colors.HexColor('#eff6ff')),
+                    ('BOX',           (0,0),(-1,-1), 0.5, colors.HexColor('#bfdbfe')),
+                    ('TOPPADDING',    (0,0),(-1,-1), 5),
+                    ('BOTTOMPADDING', (0,0),(-1,-1), 5),
+                    ('LEFTPADDING',   (0,0),(-1,-1), 10),
+                ]))
+                content.append(ck_t)
+            if checkup and checkup.treatment_follow_up:
+                content.append(Spacer(1, 0.2*cm))
+                content.append(Paragraph('<b>Treatment &amp; Follow-up Plan</b>', body_style))
+                content.append(Paragraph(checkup.treatment_follow_up.replace('\n', '<br/>'), body_style))
+            if checkup:
+                content.append(Spacer(1, 0.15*cm))
+                reviewer = checkup.doctor.get_full_name() if checkup.doctor else '—'
+                content.append(Paragraph(
+                    f'<font size=7 color="#94a3b8">Reviewed by {reviewer} on {checkup.created_at.strftime("%d %b %Y")}</font>',
+                    body_style))
             content.append(Spacer(1, 0.4*cm))
 
         # Build
         doc.build(content, onFirstPage=on_page, onLaterPages=on_page)
         buf.seek(0)
         return buf
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOTIFICATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class NotificationListView(APIView):
+    """GET /api/v1/notifications - recent notifications + unread count for the current user."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = Notification.objects.filter(recipient=request.user)
+        unread = qs.filter(is_read=False).count()
+        items = [{
+            "id": n.id,
+            "message": n.message,
+            "url": n.url,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat(),
+        } for n in qs[:15]]
+        return Response({"unread_count": unread, "notifications": items})
+
+
+class NotificationMarkReadView(APIView):
+    """POST /api/v1/notifications/mark-read - mark all (or one) notifications read."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        notif_id = request.data.get('id')
+        qs = Notification.objects.filter(recipient=request.user, is_read=False)
+        if notif_id:
+            qs = qs.filter(id=notif_id)
+        updated = qs.update(is_read=True)
+        return Response({"marked_read": updated})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

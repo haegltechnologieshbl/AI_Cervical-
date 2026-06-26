@@ -1,8 +1,8 @@
 import re
 from rest_framework import serializers
 from .models import (
-    Analysis, Patient, GynecologicalHistory, ReproductiveHistory,
-    ScreeningRecord, FollowUpRecord, TreatmentRecord, Appointment, RiskAssessment
+    Analysis, Patient,
+    PapSmearTest, CheckupRecommendation
 )
 
 
@@ -21,6 +21,7 @@ class PatientSerializer(serializers.ModelSerializer):
             'hpv_status', 'last_screening_date', 'pregnancy_status',
             'medical_history', 'medications', 'allergies', 'family_history',
             'notes', 'created_at', 'updated_at', 'analyses_count', 'created_by',
+            'assigned_doctor', 'assigned_technician',
         ]
         read_only_fields = ['patient_id', 'created_at', 'updated_at', 'created_by']
 
@@ -93,77 +94,22 @@ class AnalyzeRequestSerializer(serializers.Serializer):
         return data
 
 
-# ========== HOSPITAL MANAGEMENT SERIALIZERS ==========
-
-class GynecologicalHistorySerializer(serializers.ModelSerializer):
-    """Serializer for Gynecological History model"""
+class PapSmearTestSerializer(serializers.ModelSerializer):
+    """Serializer for Pap Smear Test"""
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    technician_name = serializers.CharField(source='technician.username', read_only=True)
 
     class Meta:
-        model = GynecologicalHistory
+        model = PapSmearTest
         fields = '__all__'
-        read_only_fields = ['history_id', 'created_at', 'updated_at']
+        read_only_fields = ['test_id', 'test_date', 'technician']
 
-
-class ReproductiveHistorySerializer(serializers.ModelSerializer):
-    """Serializer for Reproductive History model"""
+class CheckupRecommendationSerializer(serializers.ModelSerializer):
+    """Serializer for Doctor's Checkup Recommendation"""
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    doctor_name = serializers.CharField(source='doctor.username', read_only=True)
 
     class Meta:
-        model = ReproductiveHistory
+        model = CheckupRecommendation
         fields = '__all__'
-        read_only_fields = ['history_id', 'created_at', 'updated_at']
-
-
-class ScreeningRecordSerializer(serializers.ModelSerializer):
-    """Serializer for Screening Record model"""
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
-
-    class Meta:
-        model = ScreeningRecord
-        fields = '__all__'
-        read_only_fields = ['record_id', 'created_at']
-
-
-class FollowUpRecordSerializer(serializers.ModelSerializer):
-    """Serializer for Follow-Up Record model"""
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-
-    class Meta:
-        model = FollowUpRecord
-        fields = '__all__'
-        read_only_fields = ['followup_id', 'created_at', 'updated_at']
-
-
-class TreatmentRecordSerializer(serializers.ModelSerializer):
-    """Serializer for Treatment Record model"""
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
-    prescribing_doctor_name = serializers.CharField(source='prescribing_doctor.username', read_only=True)
-
-    class Meta:
-        model = TreatmentRecord
-        fields = '__all__'
-        read_only_fields = ['treatment_id', 'created_at', 'updated_at']
-
-
-class AppointmentSerializer(serializers.ModelSerializer):
-    """Serializer for Appointment model"""
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-
-    class Meta:
-        model = Appointment
-        fields = '__all__'
-        read_only_fields = ['appointment_id', 'created_at', 'updated_at']
-
-
-class RiskAssessmentSerializer(serializers.ModelSerializer):
-    """Serializer for Risk Assessment model"""
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
-    assessed_by_name = serializers.CharField(source='assessed_by.username', read_only=True)
-
-    class Meta:
-        model = RiskAssessment
-        fields = '__all__'
-        read_only_fields = ['assessment_id', 'created_at']
+        read_only_fields = ['checkup_id', 'created_at', 'doctor']

@@ -1,0 +1,341 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏥</text></svg>">
+  <title>{% block title %}Doctor Portal — CerviStage AI{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            stage: {
+              normal: "#22c55e",
+              atypia: "#84cc16",
+              lsil: "#eab308",
+              hsil: "#f97316",
+              carcinoma: "#ef4444"
+            },
+            doctor: {
+              50:  "#eef2ff",
+              100: "#e0e7ff",
+              200: "#c7d2fe",
+              300: "#a5b4fc",
+              400: "#818cf8",
+              500: "#6366f1",
+              600: "#4f46e5",
+              700: "#4338ca",
+              800: "#3730a3",
+              900: "#312e81"
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+    /* Page enter animation */
+    .page-in { animation: pageIn .25s ease-out; }
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    @media print { .no-print { display: none !important; } }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-slate-50 min-h-screen antialiased text-gray-900 flex flex-col">
+
+  <!-- ═══════════════ TOP NAVIGATION BAR ═══════════════ -->
+  <nav class="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+
+        <!-- Left: Logo & Brand -->
+        <div class="flex items-center gap-6">
+          <a href="{% url 'doctor-dashboard' %}" class="flex items-center gap-2">
+            <img src="{% static 'img/logo.png' %}" alt="CerviStage AI" class="h-16 w-auto object-contain">
+          </a>
+
+          <!-- Desktop Navigation Links -->
+          <div class="hidden lg:flex items-center gap-1">
+            <!-- 1. Dashboard -->
+            <a href="{% url 'doctor-dashboard' %}"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5
+                      {% if request.resolver_match.url_name == 'doctor-dashboard' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+              <span>Dashboard</span>
+            </a>
+
+            <!-- 2. My Patients -->
+            <a href="{% url 'doctor-patients' %}"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5
+                      {% if request.resolver_match.url_name == 'doctor-patients' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+              <span>My Patients</span>
+            </a>
+
+            <!-- 3. Assign Technician -->
+            <a href="{% url 'doctor-assign-technician' %}"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5
+                      {% if request.resolver_match.url_name == 'doctor-assign-technician' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+              </svg>
+              <span>Assign Technician</span>
+            </a>
+
+            <!-- 4. Analysis History -->
+            <a href="{% url 'doctor-history' %}"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5
+                      {% if request.resolver_match.url_name == 'doctor-history' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:text-gray-900 hover:bg-gray-100{% endif %}">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span>Analysis History</span>
+            </a>
+
+           
+          </div>
+        </div>
+
+        <!-- Right: Bell + User dropdown -->
+        <div class="flex items-center gap-4">
+          <!-- Notification Bell -->
+          <div class="relative" id="notifWrap">
+            <button onclick="toggleNotifications(event)" class="relative p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Notifications">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+              <span id="notifBadge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full ring-2 ring-white flex items-center justify-center">0</span>
+            </button>
+
+            <!-- Dropdown -->
+            <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <h4 class="text-sm font-bold text-gray-900">Notifications</h4>
+                <button onclick="markAllNotificationsRead()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Mark all read</button>
+              </div>
+              <div id="notifList" class="max-h-96 overflow-y-auto divide-y divide-gray-50">
+                <p class="px-4 py-6 text-sm text-gray-400 text-center">Loading…</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- User Menu Dropdown -->
+          <div class="relative" id="userMenuWrap">
+            <button onclick="toggleUserMenu()" class="flex items-center gap-2.5 text-gray-700 hover:text-gray-900 focus:outline-none">
+              <div class="h-9 w-9 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
+                <span class="text-white font-semibold text-sm">{{ request.user.username|first|upper }}</span>
+              </div>
+              <div class="hidden md:flex flex-col items-start leading-none">
+                <span class="text-sm font-semibold text-gray-800">{{ request.user.get_full_name|default:request.user.username }}</span>
+                <span class="text-[10px] font-bold text-indigo-600 mt-0.5">Doctor</span>
+              </div>
+              <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            <!-- Dropdown menu -->
+            <div id="userMenu" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl ring-1 ring-black/5 py-1 z-50">
+              <div class="px-4 py-3 border-b border-gray-100">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ request.user.get_full_name|default:request.user.username }}</p>
+                <p class="text-xs text-gray-400 truncate mt-0.5">{{ request.user.email }}</p>
+                <span class="mt-1.5 inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">Doctor</span>
+              </div>
+              
+              <div class="border-t border-gray-100 mt-1"></div>
+              <button onclick="logout()" class="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+                Sign Out
+              </button>
+            </div>
+          </div>
+
+          <!-- Mobile Hamburger -->
+          <button onclick="toggleMobileMenu()" class="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Dropdown Navigation -->
+    <div id="mobileMenu" class="hidden lg:hidden bg-white border-t border-gray-100 py-2 px-4 space-y-1">
+      <a href="{% url 'doctor-dashboard' %}" class="block px-3 py-2 rounded-lg text-sm font-medium {% if request.resolver_match.url_name == 'doctor-dashboard' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600{% endif %}">Dashboard</a>
+      <a href="{% url 'doctor-patients' %}" class="block px-3 py-2 rounded-lg text-sm font-medium {% if request.resolver_match.url_name == 'doctor-patients' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600{% endif %}">My Patients</a>
+      <a href="{% url 'doctor-assign-technician' %}" class="block px-3 py-2 rounded-lg text-sm font-medium {% if request.resolver_match.url_name == 'doctor-assign-technician' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600{% endif %}">Assign Technician</a>
+      <a href="{% url 'doctor-history' %}" class="block px-3 py-2 rounded-lg text-sm font-medium {% if request.resolver_match.url_name == 'doctor-history' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600{% endif %}">Analysis History</a>
+      <button onclick="logout()" class="w-full text-left block px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════ MAIN CONTENT AREA ═══════════════ -->
+  <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex-1 page-in">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer class="bg-white border-t border-gray-200 py-4 px-4 sm:px-6 lg:px-8 mt-auto no-print">
+    <div class="max-w-7xl mx-auto flex items-center justify-between text-xs text-gray-400">
+      <p>&copy; 2026 CerviStage AI. All rights reserved.</p>
+      <p>Doctor Portal</p>
+    </div>
+  </footer>
+
+  <script>
+    // ── CSRF Cookie ──
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    // ── User Dropdown ──
+    function toggleUserMenu() {
+      document.getElementById('userMenu').classList.toggle('hidden');
+    }
+
+    // ── Mobile Menu ──
+    function toggleMobileMenu() {
+      document.getElementById('mobileMenu').classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('userMenuWrap');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('userMenu')?.classList.add('hidden');
+      }
+      const nwrap = document.getElementById('notifWrap');
+      if (nwrap && !nwrap.contains(e.target)) {
+        document.getElementById('notifDropdown')?.classList.add('hidden');
+      }
+    });
+
+    // ── Notifications ──
+    function timeAgo(iso) {
+      const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s/60) + 'm ago';
+      if (s < 86400) return Math.floor(s/3600) + 'h ago';
+      return Math.floor(s/86400) + 'd ago';
+    }
+
+    async function loadNotifications() {
+      try {
+        const resp = await fetch('/api/v1/notifications', { credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const badge = document.getElementById('notifBadge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+        const list = document.getElementById('notifList');
+        if (!data.notifications.length) {
+          list.innerHTML = '<p class="px-4 py-6 text-sm text-gray-400 text-center">No notifications yet</p>';
+          return;
+        }
+        list.innerHTML = data.notifications.map(n => `
+          <a href="${n.url || '#'}" class="block px-4 py-3 hover:bg-gray-50 transition-colors ${n.is_read ? '' : 'bg-indigo-50/40'}">
+            <p class="text-sm text-gray-800 leading-snug">${n.message}</p>
+            <p class="text-xs text-gray-400 mt-1">${timeAgo(n.created_at)}</p>
+          </a>`).join('');
+      } catch (e) { /* silent */ }
+    }
+
+    function toggleNotifications(e) {
+      e.stopPropagation();
+      const dd = document.getElementById('notifDropdown');
+      const opening = dd.classList.contains('hidden');
+      dd.classList.toggle('hidden');
+      if (opening) { loadNotifications(); markAllNotificationsRead(true); }
+    }
+
+    async function markAllNotificationsRead(silent) {
+      try {
+        await fetch('/api/v1/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+          credentials: 'same-origin',
+          body: JSON.stringify({}),
+        });
+        document.getElementById('notifBadge')?.classList.add('hidden');
+        if (!silent) loadNotifications();
+      } catch (e) { /* silent */ }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadNotifications();
+      setInterval(loadNotifications, 60000);  // refresh every minute
+    });
+
+    // ── Logout ──
+    async function logout() {
+      if (!confirm('Are you sure you want to sign out?')) return;
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          await fetch('/api/v1/auth/logout', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ refresh: refreshToken })
+          });
+        }
+      } catch (error) {
+        console.log('Logout API call failed, continuing...');
+      }
+      localStorage.clear();
+      window.location.href = '/login/';
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+  {% include "includes/toast.html" %}
+</body>
+</html>

@@ -1,5 +1,5 @@
-{% extends "user_base.html" %}
-{% block title %}Analyze — CerviStage AI{% endblock %}
+{% extends "technician/technician_base.html" %}
+{% block title %}Run AI Analysis — CerviStage AI{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto w-full">
@@ -8,9 +8,9 @@
   <div id="uploadSection" class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
 
     <!-- Left: Upload form -->
-    <div class="h-full min-h-[600px] bg-white/40 backdrop-blur-xl rounded-2xl border-2 border-dashed border-indigo-200 shadow-lg p-3 flex flex-col">
+    <div class="h-full min-h-[600px] bg-white/40 backdrop-blur-xl rounded-2xl border-2 border-dashed border-teal-200 shadow-lg p-3 flex flex-col">
       <div class="space-y-3 flex-1 overflow-y-auto">
-        <h1 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600">Analyze Image</h1>
+        <h1 class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-teal-600 via-emerald-600 to-emerald-700">Analyze Image</h1>
         <p class="text-sm text-gray-500 font-medium">Upload a Pap smear or colposcopy image for AI-powered staging.</p>
 
       <form id="analyzeForm" enctype="multipart/form-data" class="space-y-3">
@@ -18,26 +18,26 @@
 
         <!-- Drop zone -->
         <div id="dropZone"
-          class="bg-white/60 backdrop-blur-xl border-2 border-dashed border-indigo-200 shadow rounded-2xl p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group"
+          class="bg-white/60 backdrop-blur-xl border-2 border-dashed border-teal-200 shadow rounded-2xl p-6 text-center cursor-pointer hover:border-emerald-500 hover:bg-teal-50/50 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group"
           onclick="document.getElementById('fileInput').click()">
-          <div class="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
+          <div class="absolute inset-0 bg-gradient-to-br from-teal-50 to-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
           <div id="dropContent" class="flex flex-col items-center gap-4 z-10 relative">
             <div class="bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl p-5 shadow-inner group-hover:shadow-md transition-shadow">
-              <svg class="w-10 h-10 text-indigo-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <svg class="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
             </div>
             <div>
               <p class="font-bold text-gray-800 text-lg">Click or drag to upload</p>
-              <p class="text-sm text-indigo-400 mt-1 font-medium">Upload 1 image or a full batch · JPEG, PNG, TIFF</p>
+              <p class="text-sm text-teal-400 mt-1 font-medium">Upload 1 image or a full batch · JPEG, PNG, TIFF</p>
             </div>
           </div>
-          <div id="imagePreviewContainer" class="hidden grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 mx-auto max-h-48 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-indigo-200"></div>
+          <div id="imagePreviewContainer" class="hidden grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 mx-auto max-h-48 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-teal-200"></div>
         </div>
         
         <!-- Choose buttons: Files or Folder -->
         <div class="grid grid-cols-2 gap-2">
-          <label for="fileInput" class="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/70 backdrop-blur-sm border border-indigo-100 text-sm font-semibold text-indigo-700 cursor-pointer hover:bg-indigo-50 hover:shadow-md transition-all shadow-sm">
+          <label for="fileInput" class="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/70 backdrop-blur-sm border border-teal-100 text-sm font-semibold text-teal-700 cursor-pointer hover:bg-teal-50 hover:shadow-md transition-all shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
             </svg>
@@ -54,9 +54,9 @@
         <input type="file" id="folderInput" accept="image/*,.bmp,.tiff,.tif" class="hidden" multiple webkitdirectory />
 
         <!-- Patient Selection -->
-        <div class="bg-white border border-indigo-200 rounded-xl overflow-hidden">
-          <div class="px-4 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
-            <label class="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+        <div class="bg-white border border-teal-200 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 bg-gradient-to-r from-teal-50 to-emerald-50 border-b border-teal-100">
+            <label class="text-sm font-semibold text-teal-900 flex items-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>
@@ -65,8 +65,13 @@
           </div>
           <div class="p-4">
             <div class="relative">
-              <select id="patientSelect" name="patient_id" {% if request.user.profile.role == 'senior_technician' %}required{% endif %} class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500 appearance-none">
+              <select id="patientSelect" name="patient_id" {% if request.user.profile.role == 'senior_technician' %}required{% endif %} class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-500 appearance-none">
                 <option value="">-- Select a patient --</option>
+                {% for p in assigned_patients %}
+                <option value="{{ p.patient_id }}">{{ p.full_name }} (Age: {{ p.age|default:"—" }})</option>
+                {% empty %}
+                <option value="" disabled>No assigned patients available</option>
+                {% endfor %}
               </select>
               <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -81,7 +86,7 @@
           </div>
         </div>
 
-        <button type="submit" id="submitBtn" class="w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] text-white font-bold rounded-2xl transition-all duration-300 transform hover:-translate-y-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+        <button type="submit" id="submitBtn" class="w-full py-3.5 bg-gradient-to-r from-teal-600 via-emerald-600 to-emerald-700 hover:from-teal-700 hover:via-emerald-700 hover:to-emerald-800 shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] text-white font-bold rounded-2xl transition-all duration-300 transform hover:-translate-y-1 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15l-1.575 2.137A2.25 2.25 0 0116.4 18H7.6a2.25 2.25 0 01-1.825-.863L4.2 15m15.6 0l-2.438-1.219A2.25 2.25 0 0015.75 12H8.25c-.8 0-1.528.438-1.912 1.081L4.2 15" />
           </svg>
@@ -116,12 +121,12 @@
           </div>
         </div>
 
-        <div id="progressWrapper" class="hidden space-y-3 p-5 bg-white/70 backdrop-blur-xl rounded-2xl border border-indigo-100 shadow-lg">
-          <div class="flex justify-between text-xs font-bold text-indigo-700 uppercase tracking-wider items-center">
+        <div id="progressWrapper" class="hidden space-y-3 p-5 bg-white/70 backdrop-blur-xl rounded-2xl border border-teal-100 shadow-lg">
+          <div class="flex justify-between text-xs font-bold text-teal-700 uppercase tracking-wider items-center">
             <span id="progressLabel">Analyzing 0/0 images...</span>
-            <span id="progressPct" class="text-indigo-900 text-lg">0%</span>
+            <span id="progressPct" class="text-teal-900 text-lg">0%</span>
           </div>
-          <div class="h-3 bg-indigo-100 rounded-full overflow-hidden relative shadow-inner">
+          <div class="h-3 bg-teal-100 rounded-full overflow-hidden relative shadow-inner">
             <div id="progressBar" class="absolute h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(99,102,241,0.6)]" style="width:0%"></div>
           </div>
           <!-- Detailed progress info with better visual -->
@@ -136,10 +141,10 @@
             </div>
           </div>
           <!-- Algorithm and Time Info -->
-          <div class="grid grid-cols-3 gap-3 text-sm border-t border-indigo-100 pt-3">
+          <div class="grid grid-cols-3 gap-3 text-sm border-t border-teal-100 pt-3">
             <div class="text-center">
               <p class="text-xs text-indigo-500 uppercase font-semibold">Algorithm</p>
-              <p id="progressAlgorithm" class="text-sm font-bold text-indigo-900">EfficientNet-B3</p>
+              <p id="progressAlgorithm" class="text-sm font-bold text-teal-900">EfficientNet-B3</p>
             </div>
             <div class="text-center">
               <p class="text-xs text-indigo-500 uppercase font-semibold">Est. Remaining</p>
@@ -155,53 +160,53 @@
         <div id="errorMsg" class="hidden p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700"></div>
       </form>
 
-      <div class="p-5 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100 text-sm text-indigo-900/80 space-y-2 shadow-sm">
-        <p class="font-bold text-indigo-900 flex items-center gap-2">
+      <div class="p-5 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100 text-sm text-teal-900/80 space-y-2 shadow-sm">
+        <p class="font-bold text-teal-900 flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
           </svg>
           AI Model Information
         </p>
         <div class="grid grid-cols-2 gap-3 mt-3">
-          <div class="bg-white/60 rounded-lg p-2 border border-indigo-200">
-            <p class="text-xs text-indigo-600 uppercase font-semibold">Architecture</p>
-            <p class="text-sm font-bold text-indigo-900">EfficientNet-B3</p>
+          <div class="bg-white/60 rounded-lg p-2 border border-teal-200">
+            <p class="text-xs text-emerald-600 uppercase font-semibold">Architecture</p>
+            <p class="text-sm font-bold text-teal-900">EfficientNet-B3</p>
           </div>
-          <div class="bg-white/60 rounded-lg p-2 border border-indigo-200">
-            <p class="text-xs text-indigo-600 uppercase font-semibold">Parameters</p>
-            <p class="text-sm font-bold text-indigo-900">12.3 Million</p>
+          <div class="bg-white/60 rounded-lg p-2 border border-teal-200">
+            <p class="text-xs text-emerald-600 uppercase font-semibold">Parameters</p>
+            <p class="text-sm font-bold text-teal-900">12.3 Million</p>
           </div>
-          <div class="bg-white/60 rounded-lg p-2 border border-indigo-200">
-            <p class="text-xs text-indigo-600 uppercase font-semibold">Training</p>
-            <p class="text-sm font-bold text-indigo-900">Focal Loss + Mixup</p>
+          <div class="bg-white/60 rounded-lg p-2 border border-teal-200">
+            <p class="text-xs text-emerald-600 uppercase font-semibold">Training</p>
+            <p class="text-sm font-bold text-teal-900">Focal Loss + Mixup</p>
           </div>
-          <div class="bg-white/60 rounded-lg p-2 border border-indigo-200">
-            <p class="text-xs text-indigo-600 uppercase font-semibold">Detection</p>
-            <p class="text-sm font-bold text-indigo-900">5 Classes</p>
+          <div class="bg-white/60 rounded-lg p-2 border border-teal-200">
+            <p class="text-xs text-emerald-600 uppercase font-semibold">Detection</p>
+            <p class="text-sm font-bold text-teal-900">5 Classes</p>
           </div>
         </div>
-        <p class="text-xs text-indigo-700 mt-2 italic">Pre-trained on ImageNet, fine-tuned for cervical cytology classification</p>
+        <p class="text-xs text-teal-700 mt-2 italic">Pre-trained on ImageNet, fine-tuned for cervical cytology classification</p>
       </div>
       </div>
     </div>
 
     <!-- Right: System Information -->
     <div id="awaitingState" class="h-full">
-      <div class="h-full min-h-[600px] bg-white/40 backdrop-blur-xl rounded-2xl border-2 border-indigo-200 shadow-lg relative overflow-hidden">
+      <div class="h-full min-h-[600px] bg-white/40 backdrop-blur-xl rounded-2xl border-2 border-teal-200 shadow-lg relative overflow-hidden">
         <div class="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-purple-50/30"></div>
 
         <!-- System Info Content -->
         <div class="relative z-10 p-4 h-full overflow-y-auto">
-          <h3 class="text-xl font-bold text-indigo-900 mb-3 flex items-center gap-3">
-            <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <h3 class="text-xl font-bold text-teal-900 mb-3 flex items-center gap-3">
+            <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15l-1.575 2.137A2.25 2.25 0 0116.4 18H7.6a2.25 2.25 0 01-1.825-.863L4.2 15m15.6 0l-2.438-1.219A2.25 2.25 0 0015.75 12H8.25c-.8 0-1.528.438-1.912 1.081L4.2 15" />
             </svg>
             CerviStage AI System
           </h3>
 
           <!-- AI Model Info -->
-          <div class="bg-white rounded-xl p-3 shadow-md border border-indigo-100 mb-3">
-            <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wide mb-2 flex items-center gap-2">
+          <div class="bg-white rounded-xl p-3 shadow-md border border-teal-100 mb-3">
+            <h4 class="text-xs font-bold text-teal-900 uppercase tracking-wide mb-2 flex items-center gap-2">
               <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15l-1.575 2.137A2.25 2.25 0 0116.4 18H7.6a2.25 2.25 0 01-1.825-.863L4.2 15m15.6 0l-2.438-1.219A2.25 2.25 0 0015.75 12H8.25c-.8 0-1.528.438-1.912 1.081L4.2 15" />
               </svg>
@@ -228,8 +233,8 @@
           </div>
 
           <!-- Detection Classes -->
-          <div class="bg-white rounded-xl p-3 shadow-md border border-indigo-100 mb-3">
-            <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wide mb-2 flex items-center gap-2">
+          <div class="bg-white rounded-xl p-3 shadow-md border border-teal-100 mb-3">
+            <h4 class="text-xs font-bold text-teal-900 uppercase tracking-wide mb-2 flex items-center gap-2">
               <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806m0 0a3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946m0 0a3.42 3.42 0 01-.806 1.946 3.42 3.42 0 00-3.138 3.138 3.42 3.42 0 01-1.946.806m0 0a3.42 3.42 0 01-1.946-.806 3.42 3.42 0 00-3.138-3.138 3.42 3.42 0 00-.806-1.946m0 0a3.42 3.42 0 01.806-1.946 3.42 3.42 0 013.138-3.138z" />
               </svg>
@@ -260,8 +265,8 @@
           </div>
 
           <!-- Processing Modes -->
-          <div class="bg-white rounded-2xl p-5 shadow-md border border-indigo-100 mb-4">
-            <h4 class="text-sm font-bold text-indigo-900 uppercase tracking-wide mb-4 flex items-center gap-2">
+          <div class="bg-white rounded-2xl p-5 shadow-md border border-teal-100 mb-4">
+            <h4 class="text-sm font-bold text-teal-900 uppercase tracking-wide mb-4 flex items-center gap-2">
               <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
@@ -296,26 +301,26 @@
                 </div>
                 <span class="text-sm font-bold text-purple-700">~2s/image</span>
               </div>
-              <div class="flex items-center justify-between p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+              <div class="flex items-center justify-between p-3 rounded-xl bg-teal-50 border border-teal-200">
                 <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center">
+                  <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
                   <div>
-                    <p class="font-bold text-indigo-900">VPS Optimized</p>
-                    <p class="text-xs text-indigo-600">Large batches (5+ images, &gt;50MB)</p>
+                    <p class="font-bold text-teal-900">VPS Optimized</p>
+                    <p class="text-xs text-emerald-600">Large batches (5+ images, &gt;50MB)</p>
                   </div>
                 </div>
-                <span class="text-sm font-bold text-indigo-700">~1.5s/image</span>
+                <span class="text-sm font-bold text-teal-700">~1.5s/image</span>
               </div>
             </div>
           </div>
 
           <!-- Key Features -->
-          <div class="bg-white rounded-2xl p-5 shadow-md border border-indigo-100">
-            <h4 class="text-sm font-bold text-indigo-900 uppercase tracking-wide mb-4 flex items-center gap-2">
+          <div class="bg-white rounded-2xl p-5 shadow-md border border-teal-100">
+            <h4 class="text-sm font-bold text-teal-900 uppercase tracking-wide mb-4 flex items-center gap-2">
               <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
               </svg>
@@ -396,11 +401,14 @@
   const MAX_TOTAL_SIZE = 1024 * 1024 * 1024; // 1GB
   const REQUEST_TIMEOUT = 1800000; // 30 minutes
 
+  const CSRF_TOKEN = '{{ csrf_token }}';
+
   function getAuthHeaders(extraHeaders = {}) {
     const headers = { ...extraHeaders };
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    // This page is session-authenticated. Use the CSRF token for session auth
+    // instead of a (possibly stale) JWT, which DRF would reject with 401.
+    if (CSRF_TOKEN) {
+      headers['X-CSRFToken'] = CSRF_TOKEN;
     }
     return headers;
   }
@@ -409,23 +417,11 @@
   let selectedPatientId = null;
   let patientsList = [];
 
-  // Load patients on page load
-  async function loadPatients() {
-    try {
-      const resp = await fetch('/api/v1/patients', {
-        headers: getAuthHeaders(),
-        credentials: 'same-origin'
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        patientsList = data.patients || [];
-        populatePatientSelect();
-      } else if (resp.status === 401) {
-        console.error('Patient list requires login for this browser origin.');
-      }
-    } catch (err) {
-      console.error('Failed to load patients:', err);
-    }
+  // Patients are rendered server-side (session-authenticated) and embedded here,
+  // so the list does not depend on a JWT token in localStorage.
+  function loadPatients() {
+    patientsList = {{ patients_json|safe }};
+    populatePatientSelect();
   }
 
   function populatePatientSelect() {
@@ -469,6 +465,28 @@
 
   // Load patients when page loads
   loadPatients();
+
+  // Restore a previously-run analysis result so it survives a page refresh.
+  (function restoreSavedResult() {
+    const pid = new URLSearchParams(window.location.search).get('patient_id');
+    if (!pid) return;
+    let saved;
+    try { saved = sessionStorage.getItem('techAnalysis_' + pid); } catch (e) { return; }
+    if (!saved) return;
+    try {
+      selectedPatientId = pid;
+      renderResult(JSON.parse(saved));
+    } catch (e) {}
+  })();
+
+  // "New Analysis" — clear the saved result for this patient and reset the page.
+  function newAnalysis() {
+    const pid = selectedPatientId || new URLSearchParams(window.location.search).get('patient_id') || '';
+    if (pid) {
+      try { sessionStorage.removeItem('techAnalysis_' + pid); } catch (e) {}
+    }
+    window.location.href = pid ? `/technician/analyze/?patient_id=${pid}` : '/technician/analyze/';
+  }
 
   // === IMAGE COMPRESSION UTILITY ===
   // Compress with timeout and progress callback
@@ -1070,6 +1088,11 @@
 
   /* ──────────── Render full result card ──────────── */
   function renderResult(d) {
+    // Patient this result belongs to, and persist it so a page refresh keeps the result.
+    const pid = selectedPatientId || new URLSearchParams(window.location.search).get('patient_id') || '';
+    if (pid) {
+      try { sessionStorage.setItem('techAnalysis_' + pid, JSON.stringify(d)); } catch (e) {}
+    }
     const cls = d.predicted_class;
     const color = CLASS_COLORS[cls] || '#94a3b8';
     const bg = CLASS_BG[cls] || '#f8fafc';
@@ -1235,7 +1258,23 @@
         <!-- Clinical Details -->
         ${explanationHTML}
 
-        <!-- Actions -->
+        <!-- Primary workflow actions -->
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          ${pid ? `<a href="/technician/patient/${pid}/pap-smear/" class="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-semibold shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Record Pap Smear
+          </a>` : ''}
+          <button onclick="newAnalysis()" class="flex-1 flex items-center justify-center gap-2 py-3 border border-emerald-200 text-emerald-700 bg-white rounded-lg hover:bg-emerald-50 transition-colors text-sm font-semibold shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New Analysis
+          </button>
+          <a href="/technician/patients/" class="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Back
+          </a>
+        </div>
+
+        <!-- Secondary actions -->
         <div class="flex flex-col sm:flex-row gap-3 pt-2">
           <button onclick="downloadReport('${d.analysis_id}')" class="flex-1 flex items-center justify-center gap-2 py-3 border border-blue-200 text-blue-700 bg-white rounded-lg hover:bg-blue-50 transition-colors text-sm font-semibold shadow-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
@@ -1246,7 +1285,7 @@
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.622 3.453 1.5.436 3.212.436 4.622 0 1.5-.459 2.622-1.853 2.622-3.453V17.75A2.25 2.25 0 0015.75 15.5h-7.5A2.25 2.25 0 001 17.75v3.26z"/></svg>
               View All Results
             </a>` :
-    `<a href="/analysis/${d.analysis_id}" class="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold shadow-sm">
+    `<a href="/technician/analysis/${d.analysis_id}" class="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold shadow-sm">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
               Full Details
             </a>`
@@ -1262,8 +1301,8 @@
     const uploadSection = document.getElementById('uploadSection');
     if (uploadSection) uploadSection.classList.add('hidden');
 
-    // Show the checkups panel so doctor can select and send after seeing the result
-    renderCheckupsPanel(d.analysis_id);
+    // Checkups are NOT selected by the technician — the doctor adds them after
+    // reviewing the recorded Pap smear result. (Panel intentionally not rendered.)
 
     // Inject the grouped images into the bottom panel
     document.getElementById('groupedImagesPanel').innerHTML = buildGroupedImagesHTML(d);
@@ -1432,23 +1471,23 @@
     ];
 
     const checkboxesHTML = checkupOptions.map(opt => `
-      <label class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer transition-colors">
-        <input type="checkbox" name="send_checkup" value="${opt}" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+      <label class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-teal-50 hover:border-indigo-300 cursor-pointer transition-colors">
+        <input type="checkbox" name="send_checkup" value="${opt}" class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
         ${opt}
       </label>
     `).join('');
 
     const panel = document.getElementById('checkupsPanel');
     panel.innerHTML = `
-      <div class="bg-white/95 backdrop-blur-xl rounded-3xl shadow-lg border border-indigo-100 overflow-hidden">
-        <div class="px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
-          <h3 class="text-lg font-bold text-indigo-900 flex items-center gap-2">
-            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <div class="bg-white/95 backdrop-blur-xl rounded-3xl shadow-lg border border-teal-100 overflow-hidden">
+        <div class="px-6 py-4 bg-gradient-to-r from-teal-50 to-emerald-50 border-b border-teal-100">
+          <h3 class="text-lg font-bold text-teal-900 flex items-center gap-2">
+            <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             Patient Checkups to Send
           </h3>
-          <p class="text-sm text-indigo-600 mt-1">Review the result above, then select and send the recommended checkups to the patient.</p>
+          <p class="text-sm text-emerald-600 mt-1">Review the result above, then select and send the recommended checkups to the patient.</p>
         </div>
         <div class="p-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5" id="checkupCheckboxes">
@@ -1456,7 +1495,7 @@
           </div>
           <div id="checkupStatus" class="hidden mb-4"></div>
           <button onclick="sendCheckups('${analysisId}')" id="sendCheckupsBtn"
-            class="w-full py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+            class="w-full py-3 bg-gradient-to-r from-teal-600 via-emerald-600 to-emerald-700 hover:from-teal-700 hover:via-emerald-700 hover:to-emerald-800 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
             </svg>
@@ -1501,7 +1540,7 @@
         statusEl.className = 'mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium';
         statusEl.innerHTML = `✓ Checkups sent: ${selected.map(s => `<span class="inline-block px-2 py-0.5 bg-white border border-green-300 rounded-full text-xs font-semibold text-green-800 ml-1">${s}</span>`).join('')}`;
         btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Sent`;
-        btn.className = btn.className.replace('from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700', 'from-green-600 to-green-700');
+        btn.className = btn.className.replace('from-teal-600 via-emerald-600 to-emerald-700 hover:from-teal-700 hover:via-emerald-700 hover:to-emerald-800', 'from-green-600 to-green-700');
       } else {
         statusEl.className = 'mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700';
         statusEl.textContent = data.error || 'Failed to send checkups. Please try again.';
