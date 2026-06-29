@@ -235,3 +235,50 @@ class Notification(models.Model):
         if recipient is None:
             return None
         return cls.objects.create(recipient=recipient, message=message, url=url or '')
+
+
+class Feedback(models.Model):
+    """Feedback from doctors and patients about the platform."""
+
+    FEEDBACK_TYPE_CHOICES = [
+        ('complaint', 'Complaint'),
+        ('suggestion', 'Suggestion'),
+        ('bug_report', 'Bug Report'),
+        ('appreciation', 'Appreciation'),
+        ('other', 'Other'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('reviewed', 'Reviewed'),
+        ('resolved', 'Resolved'),
+    ]
+
+    feedback_id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
+    submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_feedback')
+
+    # Core feedback fields
+    feedback_type = models.CharField(max_length=20, choices=FEEDBACK_TYPE_CHOICES, default='suggestion')
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+
+    # Optional related entities
+    related_analysis = models.ForeignKey('Analysis', on_delete=models.SET_NULL, null=True, blank=True, related_name='feedback')
+    related_patient = models.ForeignKey('Patient', on_delete=models.SET_NULL, null=True, blank=True, related_name='feedback')
+
+    # Admin response fields
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_notes = models.TextField(blank=True, null=True, help_text="Admin response or notes")
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_feedback')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Feedback'
+        verbose_name_plural = 'Feedback'
+
+    def __str__(self):
+        return f"{self.feedback_type} - {self.subject}"

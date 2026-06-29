@@ -153,6 +153,19 @@ class AdminDashboardView(RoleRequiredMixin, View):
                 'created_by', 'created_by__profile'
             ).order_by('-created_at')[:10]
 
+            # Feedback statistics
+            total_feedback = Feedback.objects.count()
+            pending_feedback = Feedback.objects.filter(status='pending').count()
+            resolved_feedback = total_feedback - pending_feedback
+            recent_feedback = Feedback.objects.select_related(
+                'submitted_by', 'submitted_by__profile'
+            ).order_by('-created_at')[:5]
+
+            # Feedback by type
+            feedback_by_type = Feedback.objects.values('feedback_type').annotate(
+                count=Count('feedback_id')
+            ).order_by('-count')
+
             context = {
                 'total_users': total_users,
                 'total_analyses': total_analyses,
@@ -168,6 +181,12 @@ class AdminDashboardView(RoleRequiredMixin, View):
                 'new_doctors_month': new_doctors_month,
                 'new_technicians_month': new_technicians_month,
                 'new_patients_month': new_patients_month,
+                'total_feedback': total_feedback,
+                'pending_feedback': pending_feedback,
+                'resolved_feedback': resolved_feedback,
+                'pending_feedback_count': pending_feedback,
+                'recent_feedback': recent_feedback,
+                'feedback_by_type': list(feedback_by_type),
                 'user_role': 'admin',
             }
         else:
@@ -953,3 +972,121 @@ class AssignDoctorView(APIView):
         patient.save()
         
         return Response({"message": f"Patient assigned to doctor {doctor.username}"}, status=status.HTTP_200_OK)
+
+
+# ─── Feedback Admin Views ───────────────────────────────────────────────────────
+
+from openpyxl import Workbook
+from django.http import HttpResponse
+
+
+class AdminFeedbackView(RoleRequiredMixin, View):
+    """GET /admin/feedback/ - View all feedback (admin only)"""
+    allowed_roles = ('admin',)
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/?next=/admin/feedback/')
+
+        feedback_list = Feedback.objects.select_related(
+            'submitted_by', 'submitted_by__profile', 'reviewed_by'
+        ).order_by('-created_at')
+
+        # Apply filters
+        status_filter = request.GET.get('status')
+        type_filter = request.GET.get('type')
+
+        if status_filter:
+            feedback_list = feedback_list.filter(status=status_filter)
+        if type_filter:
+            feedback_list = feedback_list.filter(feedback_type=type_filter)
+
+        paginator = Paginator(feedback_list, 20)
+        feedback_page = paginator.get_page(request.GET.get('page'))
+
+        context = {
+            'feedback': feedback_page,
+            'status_filter': status_filter,
+            'type_filter': type_filter,
+            'total_count': feedback_list.count(),
+            'pending_feedback_count': Feedback.objects.filter(status='pending').count(),
+        }
+        return render(request, 'superuser/admin_feedback.html', context)
+
+
+class FeedbackDetailView(RoleRequiredMixin, View):
+    """GET/POST /admin/feedback/<feedback_id> - View and respond to feedback"""
+    allowed_roles = ('admin',)
+
+    def get(self, request, feedback_id):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
+        return render(request, 'superuser/feedback_detail.html', {
+            'feedback': feedback,
+            'pending_feedback_count': Feedback.objects.filter(status='pending').count(),
+        })
+
+    def post(self, request, feedback_id):
+        """Update feedback status and add admin notes"""
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
+        feedback.status = request.POST.get('status', 'pending')
+        feedback.admin_notes = request.POST.get('admin_notes', '')
+        feedback.reviewed_by = request.user
+        feedback.reviewed_at = timezone.now()
+        feedback.save()
+
+        messages.success(request, 'Feedback updated successfully.')
+        return redirect(f'/admin/feedback/{feedback_id}/')
+
+
+class FeedbackExportView(RoleRequiredMixin, View):
+    """GET /admin/feedback/export/ - Export feedback to Excel (simple format)"""
+    allowed_roles = ('admin',)
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('/login/')
+
+        feedback_list = Feedback.objects.select_related(
+            'submitted_by', 'submitted_by__profile', 'reviewed_by'
+        ).order_by('-created_at')
+
+        # Create Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Feedback"
+
+        # Simple headers
+        headers = ['ID', 'Submitted By', 'Role', 'Type', 'Subject', 'Message',
+                   'Status', 'Admin Notes', 'Reviewed By', 'Created At']
+        ws.append(headers)
+
+        # Data rows (basic format, no styling)
+        for fb in feedback_list:
+            submitter = fb.submitted_by.get_full_name() if fb.submitted_by else 'N/A'
+            submitter_role = fb.submitted_by.profile.role if fb.submitted_by else 'N/A'
+            reviewer = fb.reviewed_by.get_full_name() if fb.reviewed_by else 'N/A'
+
+            ws.append([
+                str(fb.feedback_id)[:8],
+                submitter,
+                submitter_role,
+                fb.get_feedback_type_display(),
+                fb.subject,
+                fb.message,
+                fb.get_status_display(),
+                fb.admin_notes or '',
+                reviewer,
+                fb.created_at.strftime('%Y-%m-%d %H:%M'),
+            ])
+
+        # Response
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="feedback_export_{timezone.now().strftime("%Y%m%d")}.xlsx"'
+        wb.save(response)
+        return response

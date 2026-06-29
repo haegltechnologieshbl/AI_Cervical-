@@ -145,6 +145,163 @@
       </div>
     </div>
   </div>
+
+  <!-- ── ROW 3: Feedback Stats ──────────────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Total Feedback</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2">{{ total_feedback }}</p>
+          <p class="text-xs text-slate-500 mt-1">All feedback received</p>
+        </div>
+        <div class="h-14 w-14 bg-cyan-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-comments text-2xl text-cyan-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center justify-between text-sm">
+        {% if feedback_by_type %}
+        <span class="text-slate-500">Most: {{ feedback_by_type.0.feedback_type|title }}</span>
+        {% else %}
+        <span class="text-slate-500">No feedback yet</span>
+        {% endif %}
+        <a href="{% url 'admin-feedback' %}" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">View All →</a>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Pending Review</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2">{{ pending_feedback }}</p>
+          <p class="text-xs text-slate-500 mt-1">Awaiting admin response</p>
+        </div>
+        <div class="h-14 w-14 bg-amber-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-clock text-2xl text-amber-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center justify-between text-sm">
+        {% if pending_feedback > 0 %}
+        <span class="text-amber-600 font-medium">Needs attention</span>
+        {% else %}
+        <span class="text-green-600 font-medium">All caught up!</span>
+        {% endif %}
+        <a href="{% url 'admin-feedback' %}" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">Review →</a>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-slate-600">Resolved</p>
+          <p class="text-3xl font-bold text-slate-900 mt-2">{{ resolved_feedback }}</p>
+          <p class="text-xs text-slate-500 mt-1">Completed reviews</p>
+        </div>
+        <div class="h-14 w-14 bg-green-100 rounded-xl flex items-center justify-center">
+          <i class="fas fa-check-circle text-2xl text-green-600"></i>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center justify-between text-sm">
+        {% if total_feedback > 0 %}
+        <span class="text-slate-500">{% widthratio resolved_feedback total_feedback 100 %}% completion</span>
+        {% else %}
+        <span class="text-slate-500">No data yet</span>
+        {% endif %}
+        <a href="{% url 'admin-feedback' %}" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium">History →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 3.5: Recent Feedback (if any) ───────────────────────────────────── -->
+  {% if recent_feedback %}
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+    <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h3 class="text-lg font-semibold text-slate-900">Recent Feedback</h3>
+        <p class="text-sm text-slate-500 mt-1">Latest feedback from users</p>
+      </div>
+      <a href="{% url 'admin-feedback' %}" class="text-indigo-600 hover:text-indigo-700 text-sm font-medium flex items-center gap-1">
+        View All <i class="fas fa-arrow-right text-xs"></i>
+      </a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-200">
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Subject</th>
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Submitted By</th>
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+            <th class="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for feedback in recent_feedback %}
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-slate-900 font-medium">{{ feedback.created_at|date:"d M Y" }}</div>
+              <div class="text-slate-400 text-xs">{{ feedback.created_at|date:"h:i A" }}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if feedback.feedback_type == 'complaint' %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Complaint</span>
+              {% elif feedback.feedback_type == 'suggestion' %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Suggestion</span>
+              {% elif feedback.feedback_type == 'bug_report' %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">Bug Report</span>
+              {% elif feedback.feedback_type == 'appreciation' %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Appreciation</span>
+              {% else %}
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Other</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-slate-900 font-medium truncate max-w-xs">{{ feedback.subject }}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if feedback.submitted_by %}
+                <div class="flex items-center gap-2">
+                  <div class="h-8 w-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-700 font-bold text-sm flex-shrink-0">
+                    {{ feedback.submitted_by.username|first|upper }}
+                  </div>
+                  <div>
+                    <div class="text-slate-900 font-medium">{{ feedback.submitted_by.get_full_name|default:feedback.submitted_by.username }}</div>
+                    <div class="text-slate-400 text-xs">@{{ feedback.submitted_by.username }}</div>
+                  </div>
+                </div>
+              {% else %}
+                <span class="text-slate-400 italic text-xs">Anonymous</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if feedback.status == 'pending' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>Pending
+                </span>
+              {% elif feedback.status == 'reviewed' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5"></span>Reviewed
+                </span>
+              {% elif feedback.status == 'resolved' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5"></span>Resolved
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="{% url 'feedback-detail' feedback.feedback_id %}"
+                class="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
+                <i class="fas fa-eye"></i> View
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
   {% endif %}
 
   <!-- ── ROW 4: Charts (dynamic via API) ───────────────────────────────────── -->

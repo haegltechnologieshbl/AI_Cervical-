@@ -171,6 +171,18 @@
             </a>
           </div>
 
+          <!-- Feedback -->
+          <div>
+            <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Feedback</p>
+            <a href="{% url 'admin-feedback' %}" class="nav-item flex items-center px-3 py-2.5 text-sm font-medium rounded-lg {% if request.resolver_match.url_name == 'admin-feedback' or request.resolver_match.url_name == 'feedback-detail' %}active text-white{% else %}text-slate-300 hover:bg-slate-800/50{% endif %}">
+              <i class="fas fa-comments w-5 text-center mr-3"></i>
+              User Feedback
+              {% if pending_feedback_count > 0 %}
+              <span class="ml-auto bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">{{ pending_feedback_count }}</span>
+              {% endif %}
+            </a>
+          </div>
+
           <!-- System -->
           <div>
             <p class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">System</p>

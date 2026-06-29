@@ -5,6 +5,10 @@ from . import views_patient
 from . import views_doctor
 from . import views_technician
 
+# Feedback imports
+from .views_superuser import AdminFeedbackView, FeedbackDetailView, FeedbackExportView
+from .views import FeedbackSubmitView
+
 urlpatterns = [
     # --- UI pages (Django templates) ---
     path("", views.HomePageView.as_view(), name="home"),
@@ -111,4 +115,10 @@ urlpatterns = [
     # --- Password Reset ---
     path("forgot-password/", views.ForgotPasswordView.as_view(), name="forgot-password"),
     path("verify-otp/", views.VerifyOTPView.as_view(), name="verify-otp"),
+
+    # --- Feedback ---
+    path('feedback/submit/', FeedbackSubmitView.as_view(), name='feedback-submit'),
+    path('admin/feedback/', AdminFeedbackView.as_view(), name='admin-feedback'),
+    path('admin/feedback/<uuid:feedback_id>/', FeedbackDetailView.as_view(), name='feedback-detail'),
+    path('admin/feedback/export/', FeedbackExportView.as_view(), name='feedback-export'),
 ]

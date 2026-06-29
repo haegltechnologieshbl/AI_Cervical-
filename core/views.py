@@ -18,7 +18,7 @@ from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     Analysis, Patient,
-    ClinicalNote, PapSmearTest, CheckupRecommendation, Notification,
+    ClinicalNote, PapSmearTest, CheckupRecommendation, Notification, Feedback,
 )
 from .serializers import (
     AnalysisSerializer, AnalyzeRequestSerializer, PatientSerializer, PatientListSerializer,
@@ -3103,3 +3103,96 @@ CerviStage AI Team
         except Exception as e:
             messages.error(request, f'Failed to reset password: {str(e)}')
             return render(request, 'verify_otp.html')
+
+
+# ─── Feedback Views ───────────────────────────────────────────────────────────
+
+class FeedbackSubmitView(LoginRequiredMixin, View):
+    """GET/POST /feedback/submit - Submit feedback (doctors and patients)"""
+
+    def get(self, request):
+        """Display feedback submission form"""
+        analysis_id = request.GET.get('analysis_id')
+        patient_id = request.GET.get('patient_id')
+
+        # Get related objects for display if provided
+        related_analysis = None
+        related_patient = None
+        if analysis_id:
+            try:
+                related_analysis = Analysis.objects.get(analysis_id=analysis_id)
+            except Analysis.DoesNotExist:
+                pass
+        if patient_id:
+            try:
+                related_patient = Patient.objects.get(patient_id=patient_id)
+            except Patient.DoesNotExist:
+                pass
+
+        context = {
+            'feedback_types': Feedback.FEEDBACK_TYPE_CHOICES,
+            'analysis_id': analysis_id,
+            'patient_id': patient_id,
+            'related_analysis': related_analysis,
+            'related_patient': related_patient,
+        }
+
+        # Choose template based on user role
+        user_role = request.user.profile.role if hasattr(request.user, 'profile') else None
+        if user_role == 'user':
+            template = 'doctor/feedback_submit.html'
+        elif user_role == 'patient':
+            template = 'patient/feedback_submit.html'
+        else:
+            template = 'feedback_submit.html'
+
+        return render(request, template, context)
+
+    def post(self, request):
+        """Handle feedback submission"""
+        feedback_type = request.POST.get('feedback_type', 'suggestion')
+        subject = request.POST.get('subject')
+        message = request.POST.get('message')
+        analysis_id = request.POST.get('analysis_id')
+        patient_id = request.POST.get('patient_id')
+
+        # Validation
+        if not subject or not message:
+            messages.error(request, 'Subject and message are required.')
+            return redirect('/feedback/submit/')
+
+        # Create feedback
+        feedback = Feedback.objects.create(
+            submitted_by=request.user,
+            feedback_type=feedback_type,
+            subject=subject,
+            message=message,
+        )
+
+        # Link to analysis if provided
+        if analysis_id:
+            try:
+                feedback.related_analysis = Analysis.objects.get(analysis_id=analysis_id)
+            except Analysis.DoesNotExist:
+                pass
+
+        # Link to patient if provided
+        if patient_id:
+            try:
+                feedback.related_patient = Patient.objects.get(patient_id=patient_id)
+            except Patient.DoesNotExist:
+                pass
+
+        feedback.save()
+
+        # Notify admin about new feedback
+        admin_users = User.objects.filter(profile__role='admin')
+        for admin in admin_users:
+            Notification.notify(
+                admin,
+                f"New feedback from {request.user.get_full_name() or request.user.username}",
+                url=f"/admin/feedback/{feedback.feedback_id}/"
+            )
+
+        messages.success(request, 'Thank you for your feedback! We will review it shortly.')
+        return redirect('/dashboard/')
