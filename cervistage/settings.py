@@ -19,7 +19,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-    "core.apps.CoreConfig",  # Renamed from 'api' to 'core'
+    "cervistage.core.apps.CoreConfig",  # Core app inside cervistage directory
 ]
 
 MIDDLEWARE = [
